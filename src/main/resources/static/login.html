@@ -170,20 +170,47 @@
             align-items: center;
             gap: 6px;
             font-size: 12px;
-            background: rgba(16, 185, 129, 0.22);
-            border: 1px solid rgba(16, 185, 129, 0.4);
-            color: #a7f3d0;
             padding: 5px 10px;
             border-radius: 20px;
             font-weight: 500;
+            transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+        }
+
+        .live-status.is-checking {
+            background: rgba(148, 163, 184, 0.2);
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            color: #e2e8f0;
+        }
+
+        .live-status.is-online {
+            background: rgba(16, 185, 129, 0.22);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            color: #a7f3d0;
+        }
+
+        .live-status.is-offline {
+            background: rgba(239, 68, 68, 0.22);
+            border: 1px solid rgba(248, 113, 113, 0.5);
+            color: #fecaca;
         }
 
         .pulse-dot {
             width: 7px;
             height: 7px;
-            background-color: #34d399;
             border-radius: 50%;
+        }
+
+        .live-status.is-checking .pulse-dot {
+            background-color: #cbd5e1;
+        }
+
+        .live-status.is-online .pulse-dot {
+            background-color: #34d399;
             animation: pulseDot 2s infinite ease-in-out;
+        }
+
+        .live-status.is-offline .pulse-dot {
+            background-color: #f87171;
         }
 
         @keyframes pulseDot {
@@ -557,9 +584,9 @@
                     <span>Hospital Information System</span>
                 </div>
             </div>
-            <div class="live-status">
+            <div class="live-status is-checking" id="serverStatus" role="status" aria-live="polite">
                 <div class="pulse-dot"></div>
-                <span>Máy chủ hoạt động</span>
+                <span id="serverStatusText">Đang kiểm tra máy chủ...</span>
             </div>
         </div>
 
@@ -784,6 +811,29 @@
     const registerAlert = document.getElementById('registerAlert');
     const registerToastIcon = document.getElementById('registerToastIcon');
     const registerToastMessage = document.getElementById('registerToastMessage');
+    const serverStatus = document.getElementById('serverStatus');
+    const serverStatusText = document.getElementById('serverStatusText');
+
+    async function checkServerStatus() {
+        try {
+            const response = await fetch('/api/health', {
+                cache: 'no-store',
+                signal: AbortSignal.timeout(5000)
+            });
+            const result = await response.json();
+            const isOnline = response.ok && result.status === 'UP';
+            serverStatus.className = `live-status ${isOnline ? 'is-online' : 'is-offline'}`;
+            serverStatusText.textContent = isOnline
+                ? 'Máy chủ và database hoạt động'
+                : 'Máy chủ hoặc database không kết nối';
+        } catch (error) {
+            serverStatus.className = 'live-status is-offline';
+            serverStatusText.textContent = 'Máy chủ hoặc database không kết nối';
+        }
+    }
+
+    checkServerStatus();
+    setInterval(checkServerStatus, 15000);
 
     function showLoginForm() {
         registerPanel.style.display = 'none';
