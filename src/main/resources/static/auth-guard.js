@@ -128,14 +128,15 @@
         const header = document.querySelector('.top-header');
         if (header) {
             // Kiểm tra xem đã có badge chưa
-            if (!document.getElementById('authHeaderBadge')) {
-                const badgeContainer = document.createElement('div');
+            let badgeContainer = document.getElementById('authHeaderBadge');
+            if (!badgeContainer) {
+                badgeContainer = document.createElement('div');
                 badgeContainer.id = 'authHeaderBadge';
                 badgeContainer.style.cssText = `
                     display: flex;
                     align-items: center;
                     gap: 12px;
-                    margin-left: auto;
+                    margin-left: 0;
                     margin-right: 16px;
                     background: #f8fafc;
                     border: 1px solid #e2e8f0;
@@ -170,6 +171,60 @@
                 } else {
                     header.appendChild(badgeContainer);
                 }
+            }
+
+            // =========================================================================
+            // C. TỰ ĐỘNG GẮN QUẢ CHUÔNG THÔNG BÁO CHO TẤT CẢ CÁC TRANG
+            // Vị trí chuẩn: [ Quả Chuông 🔔 ] -> [ Tên & Vai Trò ] -> [ Đăng Xuất ]
+            // =========================================================================
+            if (!header.querySelector('.notification-wrapper')) {
+                const notifWrapper = document.createElement('div');
+                notifWrapper.className = 'notification-wrapper';
+                notifWrapper.style.cssText = 'position:relative; cursor:pointer; margin-left:auto; margin-right:18px; display:inline-flex; align-items:center;';
+                notifWrapper.innerHTML = `
+                    <i class="fa-solid fa-bell" style="font-size:22px; color:#64748b; transition:0.2s;" onmouseover="this.style.color='#0284c7'" onmouseout="this.style.color='#64748b'"></i>
+                    <span id="notifBadge" style="position:absolute; top:-7px; right:-9px; background:#ef4444; color:white; font-size:11px; font-weight:700; padding:2px 6px; border-radius:12px; display:none;">0</span>
+                    
+                    <!-- Dropdown Danh Sách Thông Báo -->
+                    <div id="notifDropdown" style="display:none; position:absolute; top:38px; right:0; width:330px; background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.15); z-index:99999; overflow:hidden; text-align:left;">
+                        <div style="padding:12px 16px; border-bottom:1px solid #e2e8f0; font-weight:700; background:#f8fafc; font-size:13.5px; color:#0f172a; display:flex; justify-content:space-between; align-items:center;">
+                            <span><i class="fa-solid fa-bell" style="color:#0284c7;"></i> Thông báo của bạn</span>
+                        </div>
+                        <div id="notifList" style="max-height:320px; overflow-y:auto; padding:0; font-size:13px;">
+                            <div style="padding:18px; text-align:center; color:#64748b;">Đang tải thông báo...</div>
+                        </div>
+                    </div>
+                `;
+
+                // Bật/tắt dropdown khi click chuông
+                notifWrapper.onclick = function(e) {
+                    e.stopPropagation();
+                    const dd = document.getElementById('notifDropdown');
+                    if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+                };
+
+                // Đóng dropdown khi click bất kỳ đâu ngoài chuông
+                document.addEventListener('click', function(e) {
+                    const dd = document.getElementById('notifDropdown');
+                    if (dd && !notifWrapper.contains(e.target)) {
+                        dd.style.display = 'none';
+                    }
+                });
+
+                // Chèn chuông vào TRƯỚC khối Badge Tên & Vai trò: [Chuông 🔔] -> [Tên & Vai trò] -> [Đăng xuất]
+                if (badgeContainer && badgeContainer.parentElement) {
+                    badgeContainer.parentElement.insertBefore(notifWrapper, badgeContainer);
+                } else {
+                    const logoutBtn = header.querySelector('.btn-logout');
+                    if (logoutBtn) {
+                        logoutBtn.parentElement.insertBefore(notifWrapper, logoutBtn);
+                    } else {
+                        header.appendChild(notifWrapper);
+                    }
+                }
+
+                // Kích hoạt logic lấy thông báo từ server
+                setupGlobalNotifications();
             }
         }
 
@@ -245,4 +300,57 @@
             window.location.href = '/login.html';
         }
     };
+
+        // HÀM TOÀN CỤC: Gọi API lấy thông báo định kỳ cho mọi người dùng
+    function setupGlobalNotifications() {
+        let notifs = [];
+
+        async function fetchNotifs() {
+            try {
+                const res = await originalFetch('/api/v1/thongbao/me');
+                if (!res.ok) return;
+                notifs = await res.json();
+                
+                const badge = document.getElementById('notifBadge');
+                const list = document.getElementById('notifList');
+                if (!badge || !list) return;
+
+                const unread = notifs.filter(n => !n.daDoc).length;
+                if (unread > 0) {
+                    badge.style.display = 'block';
+                    badge.innerText = unread > 9 ? '9+' : unread;
+                } else {
+                    badge.style.display = 'none';
+                }
+
+                if (notifs.length === 0) {
+                    list.innerHTML = '<div style="padding:20px; text-align:center; color:#64748b;">Không có thông báo nào.</div>';
+                    return;
+                }
+
+                list.innerHTML = notifs.map(n => `
+                    <div onclick="markGlobalNotifAsRead(${n.maThongBao}, event)" style="padding:12px 16px; border-bottom:1px solid #f1f5f9; cursor:pointer; background:${n.daDoc ? '#ffffff' : '#f0f9ff'}; transition:0.2s;" onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='${n.daDoc ? '#ffffff' : '#f0f9ff'}'">
+                        <div style="font-weight:700; color:#0f172a; margin-bottom:4px; font-size:13px;">${n.tieuDe}</div>
+                        <div style="color:#475569; font-size:12.5px; line-height:1.4;">${n.noiDung}</div>
+                        <div style="color:#94a3b8; font-size:11px; margin-top:6px;"><i class="fa-regular fa-clock"></i> ${new Date(n.ngayTao).toLocaleString('vi-VN')}</div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                console.error("Lỗi lấy thông báo:", err);
+            }
+        }
+
+        // Đánh dấu đã đọc khi người dùng bấm vào thông báo
+        window.markGlobalNotifAsRead = async function(id, ev) {
+            ev.stopPropagation();
+            try {
+                await originalFetch('/api/v1/thongbao/' + id + '/read', { method: 'PUT' });
+                fetchNotifs();
+            } catch (err) { console.error(err); }
+        };
+
+        // Chạy ngay khi mở trang và lặp lại mỗi 30s
+        fetchNotifs();
+        setInterval(fetchNotifs, 30000);
+    }
 })();

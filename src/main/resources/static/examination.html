@@ -737,7 +737,7 @@
                         currentDoctorId = me.maNhanVien || '';
                     }
                 }
-
+                
                 const res = await fetch(`/api/v1/lichhen/available-slots?doctorId=${currentDoctorId}&date=${date}&loaiKham=TaiKham`);
                 if (res.ok) {
                     const slots = await res.json();
