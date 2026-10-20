@@ -26,10 +26,10 @@ public class LichHenService {
     private final TaiKhoanRepository taiKhoanRepository;
 
     public LichHenService(LichHenRepository lichHenRepository,
-                          BenhNhanRepository benhNhanRepository,
-                          KhoaRepository khoaRepository,
-                          NhanVienRepository nhanVienRepository,
-                          TaiKhoanRepository taiKhoanRepository) {
+            BenhNhanRepository benhNhanRepository,
+            KhoaRepository khoaRepository,
+            NhanVienRepository nhanVienRepository,
+            TaiKhoanRepository taiKhoanRepository) {
         this.lichHenRepository = lichHenRepository;
         this.benhNhanRepository = benhNhanRepository;
         this.khoaRepository = khoaRepository;
@@ -50,7 +50,8 @@ public class LichHenService {
         }
 
         Integer duration = expectedDuration(loaiKham);
-        if (duration == null) duration = 30;
+        if (duration == null)
+            duration = 30;
 
         List<LichHen> existing = lichHenRepository.findByMaBacSiAndNgayKham(doctorId, kDate).stream()
                 .filter(lh -> !"DaHuy".equalsIgnoreCase(lh.getTrangThai()))
@@ -66,7 +67,7 @@ public class LichHenService {
     }
 
     private void generateSlots(List<String> availableSlots, List<LichHen> existing,
-                               LocalDateTime start, LocalDateTime end, int duration) {
+            LocalDateTime start, LocalDateTime end, int duration) {
         LocalDateTime current = start;
         LocalDateTime now = LocalDateTime.now();
         while (!current.plusMinutes(duration).isAfter(end)) {
@@ -74,8 +75,10 @@ public class LichHenService {
             if (slotStart.isAfter(now)) { // Only future slots
                 LocalDateTime slotEnd = slotStart.plusMinutes(duration);
                 boolean conflict = existing.stream().anyMatch(lh -> {
-                    Integer exDur = lh.getThoiGianKhamDuKien() != null ? lh.getThoiGianKhamDuKien() : expectedDuration(lh.getLoaiKham());
-                    if (exDur == null || lh.getGioKham() == null) return false;
+                    Integer exDur = lh.getThoiGianKhamDuKien() != null ? lh.getThoiGianKhamDuKien()
+                            : expectedDuration(lh.getLoaiKham());
+                    if (exDur == null || lh.getGioKham() == null)
+                        return false;
                     LocalDateTime exStart = LocalDateTime.of(lh.getNgayKham(), lh.getGioKham());
                     LocalDateTime exEnd = exStart.plusMinutes(exDur);
                     return exStart.isBefore(slotEnd) && slotStart.isBefore(exEnd);
@@ -94,13 +97,15 @@ public class LichHenService {
                     .map(doctor -> lichHenRepository.findByMaBacSi(doctor.getMaNhanVien()))
                     .orElseGet(List::of);
             if (dateParam != null && !dateParam.isBlank()) {
-                list = list.stream().filter(lh -> java.time.LocalDate.parse(dateParam).equals(lh.getNgayKham())).toList();
+                list = list.stream().filter(lh -> java.time.LocalDate.parse(dateParam).equals(lh.getNgayKham()))
+                        .toList();
             }
             return list;
         }
-        if (accountId != null && isReceptionist(accountId)) {
-            java.time.LocalDate targetDate = (dateParam != null && !dateParam.isBlank()) 
-                    ? java.time.LocalDate.parse(dateParam) : java.time.LocalDate.now();
+        if (accountId != null && isReceptionist(accountId)) {  // nếu là lễ tân lọc theo ngày
+            java.time.LocalDate targetDate = (dateParam != null && !dateParam.isBlank())
+                    ? java.time.LocalDate.parse(dateParam)
+                    : java.time.LocalDate.now();
             return lichHenRepository.findAll().stream()
                     .filter(lh -> targetDate.equals(lh.getNgayKham()))
                     .toList();
@@ -142,8 +147,9 @@ public class LichHenService {
     }
 
     public Optional<NhanVien> findCurrentDoctor(Long accountId) {
-        return accountId == null ? Optional.empty() : nhanVienRepository.findByMaTaiKhoan(accountId)
-                .filter(employee -> "BacSi".equalsIgnoreCase(employee.getVaiTro()));
+        return accountId == null ? Optional.empty()
+                : nhanVienRepository.findByMaTaiKhoan(accountId)
+                        .filter(employee -> "BacSi".equalsIgnoreCase(employee.getVaiTro()));
     }
 
     public boolean isDoctor(Long accountId) {
@@ -152,14 +158,14 @@ public class LichHenService {
                 .filter("BacSi"::equalsIgnoreCase)
                 .isPresent();
     }
-    
+
     public boolean isPatient(Long accountId) {
         return accountId != null && taiKhoanRepository.findById(accountId)
                 .map(TaiKhoan::getVaiTro)
                 .filter("BenhNhan"::equalsIgnoreCase)
                 .isPresent();
     }
-    
+
     public boolean isReceptionist(Long accountId) {
         return accountId != null && taiKhoanRepository.findById(accountId)
                 .map(TaiKhoan::getVaiTro)
@@ -173,51 +179,40 @@ public class LichHenService {
             LichHen lh = new LichHen();
             lh.setMaLichHen(maLH);
 
-            // Xử lý bệnh nhân: có thể gửi maBenhNhan hoặc tên bệnh nhân
-            String maBN = req.get("maBenhNhan") != null ? String.valueOf(req.get("maBenhNhan")) : null;
-            String tenBN = req.get("patientName") != null ? String.valueOf(req.get("patientName")) : null;
-            String cccd = req.get("cccd") != null ? String.valueOf(req.get("cccd")) : null;
+            // Xử lý bệnh nhân: Kiểm tra xem đã có hồ sơ chưa
+            String cccdOrBhyt = req.get("cccd") != null ? String.valueOf(req.get("cccd")).trim() : null;
 
-            if (maBN == null || maBN.trim().isEmpty()) {
-                // Tìm theo CCCD nếu có
-                if (cccd != null && !cccd.trim().isEmpty()) {
-                    String finalCccd = cccd;
-                    Optional<BenhNhan> bnOpt = benhNhanRepository.findAll().stream()
-                            .filter(b -> finalCccd.equals(b.getSoCCCD()))
-                            .findFirst();
-                    if (bnOpt.isPresent()) {
-                        maBN = bnOpt.get().getMaBenhNhan();
-                    }
-                }
-                // Nếu vẫn chưa có, tạo nhanh bệnh nhân mới
-                if (maBN == null || maBN.trim().isEmpty()) {
-                    if (cccd == null || cccd.trim().isEmpty()) {
-                        throw new IllegalArgumentException("Vui lòng cung cấp Số Căn cước công dân để tạo hồ sơ bệnh nhân mới.");
-                    }
-                    BenhNhan newBn = new BenhNhan();
-                    newBn.setMaBenhNhan("BN2026" + String.format("%06d", benhNhanRepository.count() + 1));
-                    newBn.setHoTen(tenBN != null && !tenBN.trim().isEmpty() ? tenBN : "Bệnh nhân mới");
-                    newBn.setNgaySinh(LocalDate.of(1990, 1, 1));
-                    newBn.setGioiTinh("Nam");
-                    newBn.setSoCCCD(cccd);
-                    newBn.setSoDienThoai("09" + (int)(Math.random() * 90000000 + 10000000));
-                    newBn.setNgayTaoHoSo(LocalDateTime.now());
-                    BenhNhan savedBn = benhNhanRepository.save(newBn);
-                    maBN = savedBn.getMaBenhNhan();
-                }
+            if (cccdOrBhyt == null || cccdOrBhyt.isEmpty()) {
+                throw new IllegalArgumentException("Vui lòng nhập Số CCCD hoặc Mã BHYT.");
             }
-            lh.setMaBenhNhan(maBN);
 
+            final String searchKey = cccdOrBhyt;
+            Optional<BenhNhan> bnOpt = benhNhanRepository.findAll().stream()
+                    .filter(b -> (b.getSoCCCD() != null && searchKey.equalsIgnoreCase(b.getSoCCCD().trim()))
+                            || (b.getMaBHYT() != null && searchKey.equalsIgnoreCase(b.getMaBHYT().trim())))
+                    .findFirst();
+
+            if (bnOpt.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Bệnh nhân chưa có hồ sơ cá nhân! Vui lòng tạo hồ sơ tại trang Quản Lý Bệnh Nhân trước khi đặt lịch.");
+            }
+
+            lh.setMaBenhNhan(bnOpt.get().getMaBenhNhan());
             // Xử lý khoa
             String maKhoa = req.get("maKhoa") != null ? String.valueOf(req.get("maKhoa")) : null;
             if (maKhoa == null || maKhoa.trim().isEmpty()) {
                 String deptName = req.get("dept") != null ? String.valueOf(req.get("dept")) : null;
                 if (deptName != null) {
-                    if (deptName.contains("Nội")) maKhoa = "KNT";
-                    else if (deptName.contains("Ngoại")) maKhoa = "KNG";
-                    else if (deptName.contains("Tai")) maKhoa = "TMH";
-                    else if (deptName.contains("Cấp Cứu")) maKhoa = "KCC";
-                    else maKhoa = "KKB";
+                    if (deptName.contains("Nội"))
+                        maKhoa = "KNT";
+                    else if (deptName.contains("Ngoại"))
+                        maKhoa = "KNG";
+                    else if (deptName.contains("Tai"))
+                        maKhoa = "TMH";
+                    else if (deptName.contains("Cấp Cứu"))
+                        maKhoa = "KCC";
+                    else
+                        maKhoa = "KKB";
                 } else {
                     maKhoa = "KKB";
                 }
@@ -225,7 +220,8 @@ public class LichHenService {
             lh.setMaKhoa(maKhoa);
 
             lh.setMaBacSi(req.get("maBacSi") != null ? String.valueOf(req.get("maBacSi")) : "NV-DOC01");
-            lh.setNgayKham(req.get("ngayKham") != null ? LocalDate.parse(req.get("ngayKham").toString()) : LocalDate.now());
+            lh.setNgayKham(
+                    req.get("ngayKham") != null ? LocalDate.parse(req.get("ngayKham").toString()) : LocalDate.now());
 
             String gioKhamStr = req.get("gioKham") != null ? String.valueOf(req.get("gioKham")) : null;
             if (gioKhamStr != null && gioKhamStr.length() >= 5) {
@@ -276,12 +272,13 @@ public class LichHenService {
             }
             String departmentId = String.valueOf(requestBody.get("maKhoa"));
             String doctorId = String.valueOf(requestBody.get("maBacSi"));
-                        Optional<Khoa> khoaOpt = khoaRepository.findById(departmentId);
+            Optional<Khoa> khoaOpt = khoaRepository.findById(departmentId);
             if (khoaOpt.isEmpty()) {
                 throw new IllegalArgumentException("Khoa khám không hợp lệ.");
             }
             if (Boolean.FALSE.equals(khoaOpt.get().getTrangThai())) {
-                throw new IllegalArgumentException("Khoa " + khoaOpt.get().getTenKhoa() + " hiện đang tạm ngưng tiếp nhận, vui lòng chọn khoa khác.");
+                throw new IllegalArgumentException("Khoa " + khoaOpt.get().getTenKhoa()
+                        + " hiện đang tạm ngưng tiếp nhận, vui lòng chọn khoa khác.");
             }
             Optional<NhanVien> doctor = nhanVienRepository.findById(doctorId)
                     .filter(employee -> "BacSi".equalsIgnoreCase(employee.getVaiTro()))
@@ -313,7 +310,7 @@ public class LichHenService {
             }
             return lichHenRepository.save(appointment);
         } catch (RuntimeException error) {
-            if(error instanceof IllegalArgumentException || error instanceof IllegalStateException) {
+            if (error instanceof IllegalArgumentException || error instanceof IllegalStateException) {
                 throw error;
             }
             throw new IllegalArgumentException("Ngày, giờ, khoa hoặc bác sĩ không hợp lệ.");
@@ -381,7 +378,7 @@ public class LichHenService {
             }
             return lichHenRepository.save(current);
         } catch (RuntimeException error) {
-            if(error instanceof IllegalArgumentException || error instanceof IllegalStateException) {
+            if (error instanceof IllegalArgumentException || error instanceof IllegalStateException) {
                 throw error;
             }
             throw new IllegalArgumentException("Ngày hoặc giờ khám không hợp lệ.");
@@ -411,9 +408,9 @@ public class LichHenService {
         if (!"DaDatLich".equalsIgnoreCase(current.getTrangThai())) {
             throw new IllegalArgumentException("Chỉ có thể check-in lịch hẹn ở trạng thái Đã đặt lịch.");
         }
-        
+
         LocalDateTime scheduledTime = LocalDateTime.of(current.getNgayKham(), current.getGioKham());
-        
+
         if (LocalDateTime.now().isBefore(scheduledTime.minusMinutes(30))) {
             throw new IllegalArgumentException("Chỉ được check-in trước giờ khám tối đa 30 phút.");
         }
@@ -423,7 +420,7 @@ public class LichHenService {
             lichHenRepository.save(current);
             throw new IllegalStateException("Bệnh nhân đã đến trễ quá 15 phút. Lịch hẹn tự động bị hủy.");
         }
-        
+
         current.setTrangThai("DangChoKham");
         lichHenRepository.save(current);
         return Map.of("message", "Check-in thành công", "status", "DangChoKham");
@@ -442,10 +439,11 @@ public class LichHenService {
         if (doctor.isEmpty() || !doctor.get().getMaNhanVien().equals(current.getMaBacSi())) {
             throw new IllegalStateException("Bạn không được phép khám ca này.");
         }
-        
+
         try {
             // Sinh mã phiếu khám ngẫu nhiên theo định dạng PK + time
-            String maPhieuKham = "PK" + id.substring(id.length() > 6 ? id.length() - 6 : 0) + (System.currentTimeMillis() % 10000);
+            String maPhieuKham = "PK" + id.substring(id.length() > 6 ? id.length() - 6 : 0)
+                    + (System.currentTimeMillis() % 10000);
             lichHenRepository.startExamination(id, maPhieuKham, current.getMaBacSi(), current.getMaKhoa());
             return Map.of("message", "Bắt đầu khám thành công.", "maPhieuKham", maPhieuKham);
         } catch (org.springframework.dao.DataAccessException e) {
@@ -464,7 +462,7 @@ public class LichHenService {
                 .orElse(false);
     }
 
-     private boolean canPatientChange(LichHen appointment) {
+    private boolean canPatientChange(LichHen appointment) {
         if (appointment.getNgayKham() == null || appointment.getGioKham() == null
                 || "DaHuy".equalsIgnoreCase(appointment.getTrangThai())
                 || "DangKham".equalsIgnoreCase(appointment.getTrangThai())
@@ -472,7 +470,7 @@ public class LichHenService {
             return false;
         }
         return !LocalDateTime.of(appointment.getNgayKham(), appointment.getGioKham())
-            .isBefore(LocalDateTime.now().plusHours(4));
+                .isBefore(LocalDateTime.now().plusHours(4));
     }
 
     private Integer expectedDuration(String visitType) {

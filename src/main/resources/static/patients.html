@@ -1133,7 +1133,7 @@
                         alert("Không thể lưu hồ sơ cá nhân: " + err);
                         return;
                     }
-                } else if (!isEditMode) {
+                } else if (!isEditMode) { // của lễ tân
                     const res = await fetch('/api/v1/benhnhan', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

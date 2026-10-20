@@ -547,12 +547,8 @@
                 <div id="pane-walkin" class="tab-pane">
                     <form onsubmit="handleRegisterWalkin(event)">
                         <div class="form-group">
-                            <label>Họ và Tên Bệnh Nhân *</label>
-                            <input type="text" id="walkName" class="form-control" placeholder="Tên bệnh nhân đến quầy" required>
-                        </div>
-                        <div class="form-group">
                             <label>Số CCCD / Mã BHYT *</label>
-                            <input type="text" id="walkCCCD" class="form-control" placeholder="Tra cứu hoặc tạo hồ sơ nhanh" required>
+                            <input type="text" id="walkCCCD" class="form-control" placeholder="Nhập CCCD hoặc BHYT" required>
                         </div>
                         <div class="form-group">
                             <label>Khoa Khám Chỉ Định *</label>
@@ -751,6 +747,24 @@
                     type: item.hinhThucDat || 'Online',
                     status: item.trangThai || 'DaDatLich'
                 }));
+                const statusPriority = {
+                    'DaDatLich': 1,    // Ưu tiên 1: Đã đặt lịch (đang chờ Lễ tân bấm Check-in)
+                    'DangChoKham': 2,  // Ưu tiên 2: Đang chờ khám (đã check-in thành công)
+                    'DangKham': 3,     // Ưu tiên 3: Đang trong phòng khám
+                    'ChoKetQuaCLS': 4, // Ưu tiên 4: Chờ kết quả xét nghiệm
+                    'DaKham': 5,       // Ưu tiên 5: Đã khám xong
+                    'DaHuy': 6         // Ưu tiên 6: Đã hủy
+                };
+                appointments.sort((a, b) => {
+                    const pA = statusPriority[a.status] || 99;
+                    const pB = statusPriority[b.status] || 99;
+                    
+                    // 1. So sánh trạng thái trước
+                    if (pA !== pB) return pA - pB;
+                    
+                    // 2. Nếu cùng trạng thái thì sắp xếp theo Mã lịch hẹn tăng dần (LH2026000001, LH2026000002...)
+                    return (a.id || '').localeCompare(b.id || '', undefined, { numeric: true });
+                });
 
                 renderQueue();
             } catch (error) {
@@ -791,9 +805,9 @@
                 });
                 return;
             }
-
+            // Lọc theo khoa
             const filter = document.getElementById('filterDept').value;
-
+            // appointments: danh sách lịch hẹn từ loadAppointments 
             const list = filter === 'ALL' ? appointments : appointments.filter(a => a.dept === filter);
 
             list.forEach((item, index) => {
@@ -868,16 +882,14 @@
             }
         }
 
-        async function handleRegisterWalkin(e) {
+            async function handleRegisterWalkin(e) {
             e.preventDefault();
-            const name = document.getElementById('walkName').value.trim();
             const cccd = document.getElementById('walkCCCD').value.trim();
             const dept = document.getElementById('walkDept').value;
             const reason = document.getElementById('walkReason').value.trim();
             const loaiKham = document.getElementById('walkType').value;
 
             const payload = {
-                patientName: name,
                 cccd: cccd,
                 maKhoa: dept,
                 ngayKham: document.getElementById('walkDate').value,
@@ -894,13 +906,16 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+                
+                const data = await res.json().catch(() => ({}));
+
                 if (!res.ok) {
-                    const err = await res.text();
-                    alert("Lỗi cấp số tiếp đón: " + err);
+                    // Hiển thị thông báo nếu chưa có hồ sơ bệnh nhân
+                    alert(data.message || "Lỗi khi cấp số tiếp đón!");
                     return;
                 }
-                const saved = await res.json();
-                alert(`Cấp số tiếp đón trực tiếp thành công!\nMã tiếp nhận: ${saved.maLichHen} tại ${dept}`);
+
+                alert(`Cấp số tiếp đón trực tiếp thành công!\nMã tiếp nhận: ${data.maLichHen} tại ${dept}`);
                 e.target.reset();
                 await loadAppointments();
             } catch (err) {
@@ -909,7 +924,7 @@
             }
         }
 
-               async function cancelAppt(id) {
+            async function cancelAppt(id) {
             if (confirm("Bạn có chắc chắn muốn hủy lịch hẹn này?")) {
                 try {
                     const res = await fetch(`/api/v1/lichhen/${encodeURIComponent(id)}/cancel`, {

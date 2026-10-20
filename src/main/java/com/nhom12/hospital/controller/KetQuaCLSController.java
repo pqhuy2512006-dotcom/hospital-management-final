@@ -36,10 +36,13 @@ public class KetQuaCLSController {
         }
     }
 
-    @PutMapping("/{id}/ketqua")
-    public ResponseEntity<?> capNhatKetQua(@PathVariable String id, @RequestBody Map<String, Object> payload) {
+        @PutMapping("/{id}/ketqua")
+    public ResponseEntity<?> capNhatKetQua(@PathVariable String id, 
+                                           @RequestBody Map<String, Object> payload,
+                                           HttpServletRequest request) {
+        Long accountId = (Long) request.getAttribute(SessionAttributes.ACCOUNT_ID);
         try {
-            return ResponseEntity.ok(ketQuaCLSService.capNhatKetQua(id, payload));
+            return ResponseEntity.ok(ketQuaCLSService.capNhatKetQua(id, payload, accountId));
         } catch (NoSuchElementException e) {
             return ResponseEntity.notFound().build();
         }

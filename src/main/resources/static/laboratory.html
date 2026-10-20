@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -43,19 +44,22 @@
             top: 0;
             left: 0;
             height: 100vh;
-            width: 70px; /* Thu gọn mặc định */
+            width: 70px;
+            /* Thu gọn mặc định */
             background-color: var(--sidebar-bg);
             color: #cbd5e1;
             display: flex;
             flex-direction: column;
             z-index: 1000;
             overflow-x: hidden;
-            transition: width 0.3s ease; /* Hiệu ứng mở rộng trơn tru */
-            box-shadow: 2px 0 8px rgba(0,0,0,0.15);
+            transition: width 0.3s ease;
+            /* Hiệu ứng mở rộng trơn tru */
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
         }
 
         .sidebar:hover {
-            width: 260px; /* Chiều rộng khi di chuột vào */
+            width: 260px;
+            /* Chiều rộng khi di chuột vào */
         }
 
         /* Icon 3 gạch (Hamburger) */
@@ -83,7 +87,8 @@
             color: #ffffff;
             font-size: 18px;
             font-weight: 700;
-            white-space: nowrap; /* Không cho rớt dòng */
+            white-space: nowrap;
+            /* Không cho rớt dòng */
         }
 
         .sidebar-brand i {
@@ -113,7 +118,8 @@
             font-size: 14px;
             font-weight: 500;
             transition: all 0.2s;
-            white-space: nowrap; /* Chữ không bị gãy dòng lúc đang thu gọn */
+            white-space: nowrap;
+            /* Chữ không bị gãy dòng lúc đang thu gọn */
         }
 
         .sidebar-menu a:hover,
@@ -123,7 +129,8 @@
         }
 
         .sidebar-menu a i {
-            min-width: 30px; /* Giữ icon luôn nằm đúng vị trí */
+            min-width: 30px;
+            /* Giữ icon luôn nằm đúng vị trí */
             text-align: center;
             font-size: 18px;
         }
@@ -141,7 +148,8 @@
 
         /* MAIN CONTAINER */
         .main-container {
-            margin-left: 70px; /* Bỏ trống 70px cố định cho Sidebar lúc thu gọn */
+            margin-left: 70px;
+            /* Bỏ trống 70px cố định cho Sidebar lúc thu gọn */
             width: calc(100% - 70px);
             flex-grow: 1;
             display: flex;
@@ -188,7 +196,7 @@
             border-radius: 12px;
             border: 1px solid var(--border-color);
             padding: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
         }
 
         .panel-header {
@@ -251,8 +259,15 @@
             font-weight: 600;
         }
 
-        .badge-pending { background: #fef3c7; color: #b45309; }
-        .badge-completed { background: #d1fae5; color: #065f46; }
+        .badge-pending {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .badge-completed {
+            background: #d1fae5;
+            color: #065f46;
+        }
 
         /* FORM NHẬP KẾT QUẢ (CỘT PHẢI) */
         .patient-summary {
@@ -376,6 +391,7 @@
         }
     </style>
 </head>
+
 <body>
 
     <!-- Sidebar Menu -->
@@ -390,17 +406,28 @@
             <span class="link-text">MEDICARE HIS</span>
         </div>
         <ul class="sidebar-menu">
-            <li><a href="/dashboard.html"><i class="fa-solid fa-chart-pie"></i> <span class="link-text">Bảng điều khiển</span></a></li>
-            <li><a href="/appointments.html"><i class="fa-solid fa-calendar-check"></i> <span class="link-text">Đặt lịch & Tiếp đón</span></a></li>
-            <li><a href="/patients.html"><i class="fa-solid fa-hospital-user"></i> <span class="link-text">Quản lý Bệnh nhân</span></a></li>
-            <li><a href="/doctors.html"><i class="fa-solid fa-user-doctor"></i> <span class="link-text">Danh sách Nhân viên</span></a></li>
-            <li><a href="/examination.html"><i class="fa-solid fa-stethoscope"></i> <span class="link-text">Tiếp đón & Khám bệnh</span></a></li>
-            <li><a href="/laboratory.html" class="active"><i class="fa-solid fa-flask-vial"></i> <span class="link-text">Cận lâm sàng (CLS)</span></a></li>
-            <li><a href="/pharmacy.html"><i class="fa-solid fa-pills"></i> <span class="link-text">Kho Dược & Đơn thuốc</span></a></li>
-            <li><a href="/inpatient.html"><i class="fa-solid fa-bed-pulse"></i> <span class="link-text">Quản lý Giường bệnh</span></a></li>
-            <li><a href="/billing.html"><i class="fa-solid fa-file-invoice-dollar"></i> <span class="link-text">Hóa đơn Viện phí</span></a></li>
-            <li><a href="/settings.html"><i class="fa-solid fa-gear"></i> <span class="link-text">Cấu hình hệ thống</span></a></li>
-            <li><a href="/referrals.html"><i class="fa-solid fa-arrows-turn-right"></i> <span class="link-text">Chuyển khoa & Hội chẩn</span></a></li>
+            <li><a href="/dashboard.html"><i class="fa-solid fa-chart-pie"></i> <span class="link-text">Bảng điều
+                        khiển</span></a></li>
+            <li><a href="/appointments.html"><i class="fa-solid fa-calendar-check"></i> <span class="link-text">Đặt lịch
+                        & Tiếp đón</span></a></li>
+            <li><a href="/patients.html"><i class="fa-solid fa-hospital-user"></i> <span class="link-text">Quản lý Bệnh
+                        nhân</span></a></li>
+            <li><a href="/doctors.html"><i class="fa-solid fa-user-doctor"></i> <span class="link-text">Danh sách Nhân
+                        viên</span></a></li>
+            <li><a href="/examination.html"><i class="fa-solid fa-stethoscope"></i> <span class="link-text">Tiếp đón &
+                        Khám bệnh</span></a></li>
+            <li><a href="/laboratory.html" class="active"><i class="fa-solid fa-flask-vial"></i> <span
+                        class="link-text">Cận lâm sàng (CLS)</span></a></li>
+            <li><a href="/pharmacy.html"><i class="fa-solid fa-pills"></i> <span class="link-text">Kho Dược & Đơn
+                        thuốc</span></a></li>
+            <li><a href="/inpatient.html"><i class="fa-solid fa-bed-pulse"></i> <span class="link-text">Quản lý Giường
+                        bệnh</span></a></li>
+            <li><a href="/billing.html"><i class="fa-solid fa-file-invoice-dollar"></i> <span class="link-text">Hóa đơn
+                        Viện phí</span></a></li>
+            <li><a href="/settings.html"><i class="fa-solid fa-gear"></i> <span class="link-text">Cấu hình hệ
+                        thống</span></a></li>
+            <li><a href="/referrals.html"><i class="fa-solid fa-arrows-turn-right"></i> <span class="link-text">Chuyển
+                        khoa & Hội chẩn</span></a></li>
         </ul>
     </aside>
 
@@ -442,7 +469,8 @@
                     <div>Mã bệnh nhân: <strong id="lblPatientId">BN20260001</strong></div>
                     <div>Bác sĩ chỉ định: <strong id="lblDoctor">BS. CKI. Trần Văn Hùng</strong></div>
                     <div>Khoa: <strong id="lblDept">Khoa Nội Tổng Hợp</strong></div>
-                    <div>Dịch vụ: <strong id="lblService" style="color: var(--primary);">Tổng phân tích tế bào máu</strong></div>
+                    <div>Dịch vụ: <strong id="lblService" style="color: var(--primary);">Tổng phân tích tế bào
+                            máu</strong></div>
                 </div>
 
                 <form id="labResultForm" onsubmit="handleSaveResult(event)">
@@ -461,24 +489,20 @@
                         </tbody>
                     </table>
                     <div id="addParamContainer" style="margin-top: -6px; margin-bottom: 16px;">
-                        <button type="button" onclick="addCustomParam()" class="btn-add-item" style="padding: 5px 12px; font-size: 12.5px; background: #f8fafc; color: var(--primary); border: 1px dashed var(--primary); cursor: pointer; border-radius: 6px;">
+                        <button type="button" onclick="addCustomParam()" class="btn-add-item"
+                            style="padding: 5px 12px; font-size: 12.5px; background: #f8fafc; color: var(--primary); border: 1px dashed var(--primary); cursor: pointer; border-radius: 6px;">
                             <i class="fa-solid fa-plus"></i> Thêm chỉ số đo khác
                         </button>
                     </div>
                     <div class="form-group">
                         <label>Kết luận của Kỹ thuật viên / Bác sĩ đọc kết quả *</label>
-                        <textarea id="labConclusion" class="form-control" placeholder="Ghi chú kết luận tổng thể (ví dụ: Số lượng bạch cầu tăng nhẹ, nghi ngờ nhiễm khuẩn...)"></textarea>
-                    </div>
-                    
-                    <div class="form-group" style="margin-top: 12px;">
-                        <label>Đính kèm Hình ảnh (X-Quang, Siêu âm...)</label>
-                        <input type="file" id="labImageFile" accept="image/*" class="form-control" style="padding: 6px;" onchange="previewLabImage(event)">
-                        <img id="labImagePreview" style="max-width: 100%; max-height: 300px; margin-top: 10px; display: none; border-radius: 6px; border: 1px solid var(--border-color);" />
+                        <textarea id="labConclusion" class="form-control"
+                            placeholder="Ghi chú kết luận tổng thể (ví dụ: Số lượng bạch cầu tăng nhẹ, nghi ngờ nhiễm khuẩn...)"></textarea>
                     </div>
 
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
                         <div style="font-size: 13px; color: var(--text-muted);">
-                            Kỹ thuật viên phụ trách: <strong>KTV. Phạm Quốc Huy</strong>
+                            Kỹ thuật viên phụ trách: <strong id="lblKTVName">KTV. Phạm Quốc Huy</strong>
                         </div>
                         <button type="submit" class="btn-submit-result" id="btnSaveResult">
                             <i class="fa-solid fa-paper-plane"></i> Lưu & Trả Kết Quả Về Bác Sĩ
@@ -491,14 +515,16 @@
                         <label>Kết luận CLS</label>
                         <p id="doctorResultConclusion" style="white-space:pre-wrap; margin:0;"></p>
                     </div>
-                    <div class="form-group" id="doctorResultImageContainer" style="display: none;">
-                        <label>Hình ảnh đính kèm:</label>
-                        <div>
-                            <img id="doctorResultImage" src="" alt="Hình ảnh CLS" style="max-width: 100%; max-height: 400px; border: 1px solid #ddd; border-radius: 4px;" />
-                        </div>
-                    </div>
                     <table>
-                        <thead><tr><th>Chỉ số</th><th>Kết quả</th><th>Đơn vị</th><th>Khoảng tham chiếu</th><th>Đánh giá</th></tr></thead>
+                        <thead>
+                            <tr>
+                                <th>Chỉ số</th>
+                                <th>Kết quả</th>
+                                <th>Đơn vị</th>
+                                <th>Khoảng tham chiếu</th>
+                                <th>Đánh giá</th>
+                            </tr>
+                        </thead>
                         <tbody id="doctorResultParameters"></tbody>
                     </table>
                 </div>
@@ -566,7 +592,7 @@
                 if (order.status === 'PENDING') pendingCount++;
 
                 const activeClass = index === currentSelectedIndex ? 'active' : '';
-                const badgeStatus = order.status === 'PENDING' 
+                const badgeStatus = order.status === 'PENDING'
                     ? '<span class="badge badge-pending">Chờ thực hiện</span>'
                     : '<span class="badge badge-completed">Đã trả kết quả</span>';
 
@@ -622,17 +648,7 @@
                             .forEach(value => row.insertCell().textContent = String(value || ''));
                     });
                 }
-                
-                const imgContainer = document.getElementById('doctorResultImageContainer');
-                const imgElement = document.getElementById('doctorResultImage');
-                if (order.hinhAnh) {
-                    imgContainer.style.display = 'block';
-                    imgElement.src = order.hinhAnh;
-                } else {
-                    imgContainer.style.display = 'none';
-                    imgElement.src = '';
-                }
-                
+
                 return;
             }
 
@@ -662,8 +678,6 @@
             conclusionInput.value = order.conclusion || '';
             conclusionInput.readOnly = isCompleted;
 
-            const fileInput = document.getElementById('labImageFile');
-            if (fileInput) fileInput.disabled = isCompleted;
 
             const addParamBox = document.getElementById('addParamContainer');
             if (addParamBox) addParamBox.style.display = isCompleted ? 'none' : 'block';
@@ -754,29 +768,12 @@
             }
         }
 
-        function previewLabImage(event) {
-            const file = event.target.files[0];
-            const preview = document.getElementById('labImagePreview');
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    preview.style.display = 'block';
-                }
-                reader.readAsDataURL(file);
-            } else {
-                preview.src = '';
-                preview.style.display = 'none';
-            }
-        }
 
         async function handleSaveResult(e) {
             e.preventDefault();
             const order = labOrders[currentSelectedIndex];
             if (!order) return;
             const conclusion = document.getElementById('labConclusion').value.trim();
-            const preview = document.getElementById('labImagePreview');
-            const hinhAnh = (preview && preview.style.display === 'block') ? preview.src : null;
 
             if (!conclusion) {
                 alert("Vui lòng nhập kết luận tổng thể trước khi trả kết quả về bác sĩ!");
@@ -807,7 +804,6 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         conclusion: conclusion,
-                        hinhAnh: hinhAnh,
                         params: order.params || []
                     })
                 });
@@ -828,13 +824,13 @@
                 btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Lưu & Trả Kết Quả Về Bác Sĩ';
             }
         }
-        
+
         function addCustomParam() {
             const name = prompt("Nhập tên chỉ số đo mới (ví dụ: Định lượng Glucose, HbA1c...):");
             if (!name || !name.trim()) return;
             const unit = prompt("Nhập đơn vị tính (ví dụ: mmol/L, g/L, %...):", "") || "";
             const ref = prompt("Nhập khoảng tham chiếu (ví dụ: 3.9 - 6.4):", "") || "";
-            
+
             let refMin = null, refMax = null;
             if (ref.includes('-')) {
                 const parts = ref.split('-');
@@ -861,18 +857,19 @@
             window.location.href = '/login.html';
         }
 
-        window.onload = function() {
+        window.onload = function () {
             const userStr = sessionStorage.getItem('authenticatedUser');
             if (userStr) {
                 try {
                     const user = JSON.parse(userStr);
-                    const techEl = document.querySelector('.panel-card .form-group ~ div strong');
+                    const techEl = document.getElementById('lblKTVName');
                     if (techEl && user.hoTen) techEl.innerText = user.hoTen;
-                } catch(e) {}
+                } catch (e) { }
             }
             loadLabOrders();
         };
     </script>
     <script src="/auth-guard.js?v=2"></script>
 </body>
+
 </html>

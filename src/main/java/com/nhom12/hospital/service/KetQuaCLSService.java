@@ -104,7 +104,21 @@ public class KetQuaCLSService {
             map.put("params", params);
             res.add(map);
         }
-
+res.sort((a, b) -> {
+            String statusA = String.valueOf(a.getOrDefault("status", ""));
+            String statusB = String.valueOf(b.getOrDefault("status", ""));
+            
+            // Ưu tiên 1: PENDING (0) đứng trước COMPLETED (1)
+            int sComp = Integer.compare(
+                "PENDING".equalsIgnoreCase(statusA) ? 0 : 1,
+                "PENDING".equalsIgnoreCase(statusB) ? 0 : 1
+            );
+            if (sComp != 0) return sComp;
+            // Ưu tiên 2: Cùng trạng thái thì sắp xếp theo Mã CLS (id) tăng dần
+            String idA = String.valueOf(a.getOrDefault("id", ""));
+            String idB = String.valueOf(b.getOrDefault("id", ""));
+            return idA.compareTo(idB);
+        });
         return res;
     }
 
@@ -148,7 +162,7 @@ public class KetQuaCLSService {
     }
 
     @Transactional
-    public Map<String, Object> capNhatKetQua(String id, Map<String, Object> payload) {
+    public Map<String, Object> capNhatKetQua(String id, Map<String, Object> payload, Long accountId) {
         Optional<KetQuaCLS> kqOpt = ketQuaCLSRepository.findById(id);
         if (kqOpt.isEmpty()) {
             throw new NoSuchElementException("Không tìm thấy kết quả cận lâm sàng!");
@@ -158,6 +172,11 @@ public class KetQuaCLSService {
         String hinhAnh = (String) payload.get("hinhAnh");
         kq.setKetLuan(conclusion);
         if (hinhAnh != null) kq.setHinhAnhFile(hinhAnh);
+        if (accountId != null) {
+            nhanVienRepository.findByMaTaiKhoan(accountId).ifPresent(nv -> {
+                kq.setMaKTV(nv.getMaNhanVien());
+            });
+        }
         ketQuaCLSRepository.save(kq);
 
         @SuppressWarnings("unchecked")

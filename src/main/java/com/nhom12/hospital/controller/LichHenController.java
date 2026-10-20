@@ -73,7 +73,7 @@ public class LichHenController {
             if (lichHenService.isPatient(accountId)) {
                 return ResponseEntity.ok(lichHenService.createPatientAppointment(req, accountId));
             }
-            return ResponseEntity.ok(lichHenService.createAdminAppointment(req));
+        return ResponseEntity.ok(lichHenService.createAdminAppointment(req));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         } catch (IllegalStateException e) {
