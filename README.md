@@ -96,11 +96,8 @@ Script này chỉ bổ sung bảng `AuditLog`, không xóa dữ liệu nghiệp 
 1. [database/AccountDatabaseObjects.sql](database/AccountDatabaseObjects.sql)
 2. [database/EntityViews.sql](database/EntityViews.sql)
 3. [database/EntityWriteProcedures.sql](database/EntityWriteProcedures.sql)
-4. [database/FunctionQueue.sql](database/FunctionQueue.sql)
-5. [database/QueueManagement.sql](database/QueueManagement.sql)
 
 Các script trên dùng `CREATE OR ALTER` và không xóa dữ liệu bảng nghiệp vụ.
-`QueueManagement.sql` cũng cập nhật quy trình bắt đầu khám: bác sĩ có thể bắt đầu bất cứ lúc nào khi không có bệnh nhân nào khác đang khám; mỗi bệnh nhân vẫn cần được bác sĩ bấm bắt đầu riêng.
 
 ## Tài khoản mặc định của ứng dụng
 

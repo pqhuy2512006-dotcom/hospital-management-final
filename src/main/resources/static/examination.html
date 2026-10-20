@@ -758,7 +758,7 @@
         }
 
         // Hàng đợi
-        async function loadPatientQueue(selectedAppointmentId = null) {
+        async function loadPatientQueue() {
             try {
                 const [appointmentsRes, patientsRes, drugsRes, clsRes] = await Promise.all([
                     fetch('/api/v1/lichhen/me'),
@@ -777,14 +777,10 @@
                 const patients = await patientsRes.json();
                 const patientMap = new Map(patients.map(p => [p.maBenhNhan, p]));
 
-                // Hiển thị các lịch hôm nay chưa khám xong, kể cả lịch chưa check-in.
+                // Lọc bỏ những lịch đã hủy hoặc đã khám xong, chỉ hiển thị Đã đặt lịch và Đang khám
                 const todayStr = new Date().toLocaleDateString('en-CA');  // Lấy ngày hôm nay: YYYY-MM-DD
                 const filteredAppointments = appointments.filter(item => 
-                    item.ngayKham === todayStr &&
-                    ['DaDatLich', 'DangChoKham', 'DangKham'].includes(item.trangThai)
-                ).sort((a, b) =>
-                    (a.gioKham || '').localeCompare(b.gioKham || '') ||
-                    (a.maLichHen || '').localeCompare(b.maLichHen || '')
+                    item.ngayKham === todayStr && (item.trangThai === 'DangChoKham' || item.trangThai === 'DangKham')
                 );
 
                 patientQueue = filteredAppointments.map((item, index) => {
@@ -807,10 +803,7 @@
                 });
 
                 renderQueue();
-                if (patientQueue.length > 0) {
-                    const selectedIndex = patientQueue.findIndex(patient => patient.stt === selectedAppointmentId);
-                    selectPatient(selectedIndex >= 0 ? selectedIndex : 0);
-                }
+                if (patientQueue.length > 0) selectPatient(0);
 
                 initFirstMedRow();
             } catch (error) {
@@ -838,9 +831,12 @@
                     if (data.maPhieuKham) {
                         document.getElementById('lblExamCode').innerText = data.maPhieuKham;
                     }
-                    await loadPatientQueue(currentPatient.stt);
+                    loadPatientQueue(); // Cập nhật lại hàng đợi
                 } else {
                     alert("Lỗi: " + (data.message || "Không thể tiếp nhận bệnh nhân."));
+                    if (data.message && data.message.includes("quá 10 phút")) {
+                        loadPatientQueue(); // Tải lại vì lịch đã bị hủy
+                    }
                 }
             } catch (err) {
                 console.error(err);
@@ -1093,6 +1089,7 @@
                 currentPatient.status = "DONE";
                 if (selectedQueueIdx < patientQueue.length - 1) {
                     selectedQueueIdx++;
+                    patientQueue[selectedQueueIdx].status = "EXAMINING";
                     selectPatient(selectedQueueIdx);
                 } else {
                     renderQueue();
