@@ -36,7 +36,7 @@ BEGIN
     WHERE lh.TrangThai = 'DangKham' 
       AND lh.NgayKham = @NgayKham
       AND lh.MaBacSi = @MaBacSi
-    ORDER BY lh.GioKham;
+    ORDER BY lh.GioKham, lh.MaLichHen;
     
     IF @DangKham_MaLichHen IS NOT NULL
     BEGIN
@@ -68,7 +68,7 @@ BEGIN
         WHERE TrangThai = 'DangChoKham'
           AND NgayKham = @NgayKham
           AND MaBacSi = @MaBacSi
-        ORDER BY GioKham;
+        ORDER BY GioKham, MaLichHen;
         
     OPEN cur;
     DECLARE @Id VARCHAR(15), @Sched DATETIME, @Dur INT;

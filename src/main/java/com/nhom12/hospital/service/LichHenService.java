@@ -449,10 +449,6 @@ public class LichHenService {
             return Map.of("message", "Bắt đầu khám thành công.", "maPhieuKham", maPhieuKham);
         } catch (org.springframework.dao.DataAccessException e) {
             String errorMsg = e.getMessage() != null ? e.getMessage() : "Lỗi không xác định khi tiếp nhận bệnh nhân.";
-            // Trích xuất câu thông báo lỗi thực tế từ SQL Server (RAISERROR)
-            if (errorMsg.contains("Bệnh nhân đã đến trễ quá 10 phút")) {
-                throw new IllegalArgumentException("Bệnh nhân đã đến trễ quá 10 phút. Lịch hẹn đã bị tự động hủy!");
-            }
             throw new IllegalArgumentException("Không thể bắt đầu khám: " + errorMsg);
         }
     }
@@ -508,4 +504,3 @@ public class LichHenService {
                 });
     }
 }
-

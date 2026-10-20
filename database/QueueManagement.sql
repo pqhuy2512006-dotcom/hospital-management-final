@@ -24,7 +24,7 @@ ALTER TABLE dbo.LichHen
 GO
 
 -- =========================================================================
--- 2. PROCEDURE TIẾP NHẬN BỆNH NHÂN (XỬ LÝ ĐI TRỄ > 10 PHÚT)
+-- 2. PROCEDURE TIẾP NHẬN BỆNH NHÂN (MỖI LẦN CHỈ KHÁM MỘT BỆNH NHÂN)
 -- =========================================================================
 CREATE OR ALTER PROCEDURE sp_TiepNhanBenhNhan
     @MaLichHen VARCHAR(15),
@@ -34,60 +34,47 @@ CREATE OR ALTER PROCEDURE sp_TiepNhanBenhNhan
 AS
 BEGIN
     SET NOCOUNT ON;
-    
-    DECLARE @GioHen DATETIME;
-    DECLARE @TrangThai VARCHAR(20);
-    DECLARE @MaBenhNhan VARCHAR(15);
-    DECLARE @DelayMinutes INT;
-    
-    -- Lấy thông tin lịch hẹn
-    SELECT @GioHen = CAST(NgayKham AS DATETIME) + CAST(GioKham AS DATETIME),
-           @TrangThai = TrangThai,
-           @MaBenhNhan = MaBenhNhan
-    FROM dbo.LichHen
-    WHERE MaLichHen = @MaLichHen;
-    
-    IF @TrangThai <> 'DangChoKham'
-    BEGIN
-        RAISERROR(N'Lịch hẹn không ở trạng thái hợp lệ để tiếp nhận.', 16, 1);
-        RETURN;
-    END
 
-    
-    -- Tính số phút trễ (khoảng cách từ lúc hẹn đến hiện tại)
-    SET @DelayMinutes = DATEDIFF(MINUTE, @GioHen, GETDATE());
-    
-    -- Kiểm tra nếu bác sĩ gọi khám quá sớm (trước giờ hẹn)
-    IF @DelayMinutes < 0
-    BEGIN
-        RAISERROR(N'Chưa tới giờ hẹn. Không thể bắt đầu khám sớm hơn lịch trình được xếp!', 16, 1);
-        RETURN;
-    END
+    SET XACT_ABORT ON;
 
-    -- Nếu đến trễ quá 10 phút, TỰ ĐỘNG HỦY
-    IF @DelayMinutes > 10
-    BEGIN
-        UPDATE dbo.LichHen 
-        SET TrangThai = 'DaHuy'
-        WHERE MaLichHen = @MaLichHen;
-        
-        RAISERROR(N'Bệnh nhân đã đến trễ quá 10 phút. Lịch hẹn đã bị tự động hủy!', 16, 1);
-        RETURN;
-    END
-    
-    -- Nếu hợp lệ (<= 10 phút), tạo phiếu khám và chuyển trạng thái
     BEGIN TRY
         BEGIN TRANSACTION;
-        
-        -- Cập nhật Lịch hẹn
+
+        DECLARE @TrangThai VARCHAR(20);
+        DECLARE @MaBenhNhan VARCHAR(15);
+        DECLARE @MaBacSiLichHen VARCHAR(15);
+
+        SELECT @TrangThai = TrangThai,
+               @MaBenhNhan = MaBenhNhan,
+               @MaBacSiLichHen = MaBacSi
+        FROM dbo.LichHen WITH (UPDLOCK, HOLDLOCK)
+        WHERE MaLichHen = @MaLichHen;
+
+        IF @TrangThai IS NULL
+            THROW 50011, N'Không tìm thấy lịch hẹn.', 1;
+
+        IF @TrangThai NOT IN ('DaDatLich', 'DangChoKham')
+            THROW 50012, N'Lịch hẹn không ở trạng thái chờ khám để tiếp nhận.', 1;
+
+        IF @MaBacSiLichHen IS NULL OR @MaBacSiLichHen <> @MaBacSi
+            THROW 50013, N'Lịch hẹn không thuộc bác sĩ này.', 1;
+
+        IF EXISTS (
+            SELECT 1
+            FROM dbo.LichHen WITH (UPDLOCK, HOLDLOCK)
+            WHERE MaBacSi = @MaBacSi
+              AND TrangThai = 'DangKham'
+        )
+            THROW 50014, N'Không thể bắt đầu khám: bác sĩ đang khám một bệnh nhân khác.', 1;
+
         UPDATE dbo.LichHen
         SET TrangThai = 'DangKham'
-        WHERE MaLichHen = @MaLichHen;
-        
-        -- Tạo Phiếu khám (với NgayKham = GETDATE() mặc định làm thời điểm bắt đầu)
+        WHERE MaLichHen = @MaLichHen
+          AND TrangThai IN ('DaDatLich', 'DangChoKham');
+
         INSERT INTO dbo.PhieuKham (MaPhieuKham, MaBenhNhan, MaBacSi, MaKhoa, MaLichHen, NgayKham)
         VALUES (@MaPhieuKham, @MaBenhNhan, @MaBacSi, @MaKhoa, @MaLichHen, GETDATE());
-        
+
         COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH
@@ -97,4 +84,3 @@ BEGIN
     END CATCH
 END;
 GO
-

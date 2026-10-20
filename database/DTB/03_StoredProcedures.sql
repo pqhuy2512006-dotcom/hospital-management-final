@@ -332,70 +332,56 @@ SET QUOTED_IDENTIFIER OFF;
 GO
 
 -- =========================================================================
--- 2. PROCEDURE TIáº¾P NHáº¬N Bá»†NH NHÃ‚N (Xá»¬ LÃ ÄI TRá»„ > 10 PHÃšT)
+-- 2. PROCEDURE TIẾP NHẬN BỆNH NHÂN (MỖI LẦN CHỈ KHÁM MỘT BỆNH NHÂN)
 -- =========================================================================
-CREATE   PROCEDURE sp_TiepNhanBenhNhan
+CREATE OR ALTER PROCEDURE dbo.sp_TiepNhanBenhNhan
     @MaLichHen VARCHAR(15),
-    @MaPhieuKham VARCHAR(15), -- Frontend truyá»n xuá»‘ng hoáº·c tá»± sinh
+    @MaPhieuKham VARCHAR(15),
     @MaBacSi VARCHAR(15),
     @MaKhoa VARCHAR(10)
 AS
 BEGIN
     SET NOCOUNT ON;
-    
-    DECLARE @GioHen DATETIME;
-    DECLARE @TrangThai VARCHAR(20);
-    DECLARE @MaBenhNhan VARCHAR(15);
-    DECLARE @DelayMinutes INT;
-    
-    -- Láº¥y thÃ´ng tin lá»‹ch háº¹n
-    SELECT @GioHen = CAST(NgayKham AS DATETIME) + CAST(GioKham AS DATETIME),
-           @TrangThai = TrangThai,
-           @MaBenhNhan = MaBenhNhan
-    FROM dbo.LichHen
-    WHERE MaLichHen = @MaLichHen;
-    
-    IF @TrangThai <> 'DangChoKham'
-    BEGIN
-        RAISERROR(N'Lá»‹ch háº¹n khÃ´ng á»Ÿ tráº¡ng thÃ¡i há»£p lá»‡ Ä‘á»ƒ tiáº¿p nháº­n.', 16, 1);
-        RETURN;
-    END
+    SET XACT_ABORT ON;
 
-    
-    -- TÃ­nh sá»‘ phÃºt trá»… (khoáº£ng cÃ¡ch tá»« lÃºc háº¹n Ä‘áº¿n hiá»‡n táº¡i)
-    SET @DelayMinutes = DATEDIFF(MINUTE, @GioHen, GETDATE());
-    
-    -- Kiá»ƒm tra náº¿u bÃ¡c sÄ© gá»i khÃ¡m quÃ¡ sá»›m (trÆ°á»›c giá» háº¹n)
-    IF @DelayMinutes < 0
-    BEGIN
-        RAISERROR(N'ChÆ°a tá»›i giá» háº¹n. KhÃ´ng thá»ƒ báº¯t Ä‘áº§u khÃ¡m sá»›m hÆ¡n lá»‹ch trÃ¬nh Ä‘Æ°á»£c xáº¿p!', 16, 1);
-        RETURN;
-    END
-
-    -- Náº¿u Ä‘áº¿n trá»… quÃ¡ 10 phÃºt, Tá»° Äá»˜NG Há»¦Y
-    IF @DelayMinutes > 10
-    BEGIN
-        UPDATE dbo.LichHen 
-        SET TrangThai = 'DaHuy'
-        WHERE MaLichHen = @MaLichHen;
-        
-        RAISERROR(N'Bá»‡nh nhÃ¢n Ä‘Ã£ Ä‘áº¿n trá»… quÃ¡ 10 phÃºt. Lá»‹ch háº¹n Ä‘Ã£ bá»‹ tá»± Ä‘á»™ng há»§y!', 16, 1);
-        RETURN;
-    END
-    
-    -- Náº¿u há»£p lá»‡ (<= 10 phÃºt), táº¡o phiáº¿u khÃ¡m vÃ  chuyá»ƒn tráº¡ng thÃ¡i
     BEGIN TRY
         BEGIN TRANSACTION;
-        
-        -- Cáº­p nháº­t Lá»‹ch háº¹n
+
+        DECLARE @TrangThai VARCHAR(20);
+        DECLARE @MaBenhNhan VARCHAR(15);
+        DECLARE @MaBacSiLichHen VARCHAR(15);
+
+        SELECT @TrangThai = TrangThai,
+               @MaBenhNhan = MaBenhNhan,
+               @MaBacSiLichHen = MaBacSi
+        FROM dbo.LichHen WITH (UPDLOCK, HOLDLOCK)
+        WHERE MaLichHen = @MaLichHen;
+
+        IF @TrangThai IS NULL
+            THROW 50011, N'Không tìm thấy lịch hẹn.', 1;
+
+        IF @TrangThai NOT IN ('DaDatLich', 'DangChoKham')
+            THROW 50012, N'Lịch hẹn không ở trạng thái chờ khám để tiếp nhận.', 1;
+
+        IF @MaBacSiLichHen IS NULL OR @MaBacSiLichHen <> @MaBacSi
+            THROW 50013, N'Lịch hẹn không thuộc bác sĩ này.', 1;
+
+        IF EXISTS (
+            SELECT 1
+            FROM dbo.LichHen WITH (UPDLOCK, HOLDLOCK)
+            WHERE MaBacSi = @MaBacSi
+              AND TrangThai = 'DangKham'
+        )
+            THROW 50014, N'Không thể bắt đầu khám: bác sĩ đang khám một bệnh nhân khác.', 1;
+
         UPDATE dbo.LichHen
         SET TrangThai = 'DangKham'
-        WHERE MaLichHen = @MaLichHen;
-        
-        -- Táº¡o Phiáº¿u khÃ¡m (vá»›i NgayKham = GETDATE() máº·c Ä‘á»‹nh lÃ m thá»i Ä‘iá»ƒm báº¯t Ä‘áº§u)
+        WHERE MaLichHen = @MaLichHen
+          AND TrangThai IN ('DaDatLich', 'DangChoKham');
+
         INSERT INTO dbo.PhieuKham (MaPhieuKham, MaBenhNhan, MaBacSi, MaKhoa, MaLichHen, NgayKham)
         VALUES (@MaPhieuKham, @MaBenhNhan, @MaBacSi, @MaKhoa, @MaLichHen, GETDATE());
-        
+
         COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH
