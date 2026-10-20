@@ -1036,7 +1036,7 @@
                 const available = allDoctors.filter(doc => doc.specialty === departmentId);
                 doctorSelect.innerHTML = available.length
                     ? '<option value="">Chọn bác sĩ</option>' + available.map(doc =>
-                        `<option value="${doc.id}">${doc.name}${doc.maPhong ? ' - Phòng: ' + doctor.maPhong : ''}</option>`).join('')
+                        `<option value="${doc.id}">${doc.name}${doc.maPhong ? ' - Phòng: ' + doc.maPhong : ''}</option>`).join('')
                     : '<option value="">Chưa có bác sĩ thuộc khoa này</option>';
                 loadAvailableSlotsWalkin();
             } catch (error) {

@@ -58,18 +58,19 @@ public class LichHenService {
 
         List<String> availableSlots = new ArrayList<>();
         // Khung giờ sáng: 08:00 - 11:30
-        generateSlots(availableSlots, existing, kDate, LocalTime.of(8, 0), LocalTime.of(11, 30), duration);
-        // Khung giờ chiều: 13:00 - 16:30
-        generateSlots(availableSlots, existing, kDate, LocalTime.of(13, 0), LocalTime.of(23, 00), duration);
+        generateSlots(availableSlots, existing, kDate.atTime(8, 0), kDate.atTime(11, 30), duration);
+        // Khung giờ chiều: 13:00 đến nửa đêm
+        generateSlots(availableSlots, existing, kDate.atTime(13, 0), kDate.plusDays(1).atStartOfDay(), duration);
 
         return availableSlots;
     }
 
-    private void generateSlots(List<String> availableSlots, List<LichHen> existing, LocalDate kDate, LocalTime start, LocalTime end, int duration) {
-        LocalTime current = start;
+    private void generateSlots(List<String> availableSlots, List<LichHen> existing,
+                               LocalDateTime start, LocalDateTime end, int duration) {
+        LocalDateTime current = start;
         LocalDateTime now = LocalDateTime.now();
         while (!current.plusMinutes(duration).isAfter(end)) {
-            LocalDateTime slotStart = LocalDateTime.of(kDate, current);
+            LocalDateTime slotStart = current;
             if (slotStart.isAfter(now)) { // Only future slots
                 LocalDateTime slotEnd = slotStart.plusMinutes(duration);
                 boolean conflict = existing.stream().anyMatch(lh -> {
@@ -80,7 +81,7 @@ public class LichHenService {
                     return exStart.isBefore(slotEnd) && slotStart.isBefore(exEnd);
                 });
                 if (!conflict) {
-                    availableSlots.add(current.toString());
+                    availableSlots.add(current.toLocalTime().toString());
                 }
             }
             current = current.plusMinutes(30); // Giả sử mỗi slot cách nhau 30p để dễ nhìn
@@ -508,4 +509,3 @@ public class LichHenService {
                 });
     }
 }
-
