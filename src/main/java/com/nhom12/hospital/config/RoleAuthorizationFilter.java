@@ -283,21 +283,21 @@ public class RoleAuthorizationFilter extends OncePerRequestFilter {
         response.getWriter().write("{\"success\":false,\"status\":403,\"message\":\"" + message + "\"}");
     }
 
-    private boolean isDoctorRequestAllowed(String path, String method) {
+        private boolean isDoctorRequestAllowed(String path, String method) {
         if ("GET".equals(method)) {
             return isPathOrChild(path, "/api/v1/benhnhan")
                     || isPathOrChild(path, "/api/v1/lichhen")
-                    || "/api/v1/phieukham/me".equals(path)
+                    || isPathOrChild(path, "/api/v1/phieukham")
                     || isPathOrChild(path, "/api/v1/thuoc")
                     || "/api/v1/dichvucls".equals(path)
-                    || "/api/v1/cls/me".equals(path)
+                    || isPathOrChild(path, "/api/v1/cls")
                     || "/api/v1/khoa".equals(path)
                     || "/api/v1/nhanvien/me".equals(path)
                     || "/api/v1/nhanvien/doctors".equals(path)
                     || "/api/v1/chuyenkhoa/me".equals(path) || isPathOrChild(path, "/api/v1/chuyenkhoa");
         }
 
-        return ("POST".equals(method) && ("/api/v1/phieukham".equals(path)
+        return ("POST".equals(method) && (isPathOrChild(path, "/api/v1/phieukham")
                     || "/api/v1/chuyenkhoa".equals(path)
                     || path.matches("^/api/v1/chuyenkhoa/.+$")
                     || path.matches("^/api/v1/lichhen/.+/start$")))

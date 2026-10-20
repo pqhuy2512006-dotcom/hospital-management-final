@@ -655,6 +655,15 @@
 
     <!-- SCRIPT NGHIỆP VỤ VIỆN PHÍ -->
     <script>
+        // Thêm hàm kiểm tra nếu tài khoản đang đăng nhập là Bệnh nhân
+function isPatientUser() {
+    try {
+        const user = JSON.parse(sessionStorage.getItem('authenticatedUser') || '{}');
+        return ['BenhNhan', 'PATIENT'].includes(user.vaiTro);
+    } catch (e) {
+        return false;
+    }
+}
         let invoices = [];
         let selectedInvoiceIdx = 0;
         let selectedPaymentMethod = "CASH";
@@ -755,19 +764,27 @@
             const badge = document.getElementById('billStatusBadge');
             const btnPay = document.getElementById('btnPayNow');
 
-            if (inv.status === 'PAID') {
-                badge.className = 'badge-status status-paid';
-                badge.innerText = 'Đã thanh toán';
-                btnPay.disabled = true;
-                btnPay.style.opacity = '0.5';
-                btnPay.innerHTML = '<i class="fa-solid fa-check-double"></i> Đã Thu Đủ Tiền';
-            } else {
-                badge.className = 'badge-status status-unpaid';
-                badge.innerText = 'Chưa thanh toán';
-                btnPay.disabled = false;
-                btnPay.style.opacity = '1';
-                btnPay.innerHTML = '<i class="fa-solid fa-circle-check"></i> Xác Nhận Thu Tiền & Đóng Hóa Đơn';
-            }
+            const isPatient = isPatientUser();
+
+if (inv.status === 'PAID') {
+    badge.className = 'badge-status status-paid';
+    badge.innerText = 'Đã thanh toán';
+    btnPay.disabled = true;
+    btnPay.style.opacity = '0.5';
+    // Bệnh nhân hiển thị "Đã Thanh Toán", Lễ tân/Thu ngân giữ nguyên "Đã Thu Đủ Tiền"
+    btnPay.innerHTML = isPatient 
+        ? '<i class="fa-solid fa-check-double"></i> Đã Thanh Toán'
+        : '<i class="fa-solid fa-check-double"></i> Đã Thu Đủ Tiền';
+} else {
+    badge.className = 'badge-status status-unpaid';
+    badge.innerText = 'Chưa thanh toán';
+    btnPay.disabled = false;
+    btnPay.style.opacity = '1';
+    // Bệnh nhân hiển thị "Thanh Toán Viện Phí", Lễ tân/Thu ngân giữ nguyên "Xác Nhận Thu Tiền & Đóng Hóa Đơn"
+    btnPay.innerHTML = isPatient
+        ? '<i class="fa-solid fa-credit-card"></i> Thanh Toán Viện Phí'
+        : '<i class="fa-solid fa-circle-check"></i> Xác Nhận Thu Tiền & Đóng Hóa Đơn';
+}
 
             const tbody = document.getElementById('billItemsBody');
             tbody.innerHTML = '';
@@ -814,7 +831,10 @@
         async function handlePayment() {
             const inv = invoices[selectedInvoiceIdx];
             if (!inv || inv.status === 'PAID') return;
-
+            if (isPatientUser() && selectedPaymentMethod === 'CASH') {
+                alert("Vui lòng đến quầy thu ngân để thanh toán bằng tiền mặt.");
+                return;
+            }
             let methodCode = "TienMat";
             let methodText = "Tiền mặt";
             if (selectedPaymentMethod === 'QR') {
@@ -837,15 +857,21 @@
                     body: JSON.stringify({ method: methodCode })
                 });
 
-                if (res.ok) {
-                    alert(`Xác nhận thanh toán thành công cho hóa đơn ${inv.billId}!\nHình thức: ${methodText}\nĐã cập nhật trạng thái viện phí.`);
-                    await loadInvoices();
-                } else {
-                    const err = await res.json().catch(() => ({}));
-                    alert("Lỗi khi thanh toán: " + (err.message || res.statusText));
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="fa-solid fa-circle-check"></i> Xác Nhận Thu Tiền & Đóng Hóa Đơn';
-                }
+               const isPatient = isPatientUser();
+if (res.ok) {
+    const successMsg = isPatient
+        ? `Thanh toán viện phí thành công cho hóa đơn ${inv.billId}!\nHình thức: ${methodText}`
+        : `Xác nhận thanh toán thành công cho hóa đơn ${inv.billId}!\nHình thức: ${methodText}\nĐã cập nhật trạng thái viện phí.`;
+    alert(successMsg);
+    await loadInvoices();
+} else {
+    const err = await res.json().catch(() => ({}));
+    alert("Lỗi khi thanh toán: " + (err.message || res.statusText));
+    btn.disabled = false;
+    btn.innerHTML = isPatient
+        ? '<i class="fa-solid fa-credit-card"></i> Thanh Toán Viện Phí'
+        : '<i class="fa-solid fa-circle-check"></i> Xác Nhận Thu Tiền & Đóng Hóa Đơn';
+}
             } catch (err) {
                 console.error("Lỗi:", err);
                 alert("Lỗi kết nối máy chủ khi xử lý thanh toán viện phí!");

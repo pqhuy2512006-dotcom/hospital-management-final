@@ -53,6 +53,7 @@ public class KetQuaCLSService {
             Map<String, Object> map = new HashMap<>();
             map.put("id", kq.getMaKetQua());
             map.put("patientId", kq.getMaBenhNhan());
+            map.put("examId", kq.getMaPhieuKham());
             map.put("service", kq.getLoaiXetNghiem());
             map.put("serviceCode", kq.getMaDichVu());
             map.put("conclusion", kq.getKetLuan());

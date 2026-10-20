@@ -1,6 +1,5 @@
 package com.nhom12.hospital.service;
 
-import com.nhom12.hospital.entity.LichHen;
 import com.nhom12.hospital.repository.BenhNhanRepository;
 import com.nhom12.hospital.repository.KhoaRepository;
 import com.nhom12.hospital.repository.LichHenRepository;

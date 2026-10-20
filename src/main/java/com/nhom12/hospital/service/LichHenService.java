@@ -58,7 +58,7 @@ public class LichHenService {
 
         List<String> availableSlots = new ArrayList<>();
         // Khung giờ sáng: 08:00 - 11:30
-        generateSlots(availableSlots, existing, kDate.atTime(8, 0), kDate.atTime(11, 30), duration);
+        generateSlots(availableSlots, existing, kDate.atTime(0, 0), kDate.atTime(11, 30), duration);
         // Khung giờ chiều: 13:00 đến nửa đêm
         generateSlots(availableSlots, existing, kDate.atTime(13, 0), kDate.plusDays(1).atStartOfDay(), duration);
 
