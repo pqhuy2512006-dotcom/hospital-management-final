@@ -146,7 +146,7 @@ public class NhanVienService {
     public Optional<NhanVien> update(String id, NhanVien updated) {
         return nhanVienRepository.findById(id).map(nv -> {
             if (updated.getSoDienThoai() != null && nhanVienRepository.existsBySoDienThoaiAndMaNhanVienNot(updated.getSoDienThoai(), id)) {
-                throw new IllegalArgumentException("S? di?n tho?i d� du?c nh�n vi�n kh�c s? d?ng.");
+                throw new IllegalArgumentException("Số điện thoại đã được nhân viên khác sử dụng.");
             }
             nv.setHoTen(updated.getHoTen());
             nv.setTrinhDoChuyenMon(updated.getTrinhDoChuyenMon());

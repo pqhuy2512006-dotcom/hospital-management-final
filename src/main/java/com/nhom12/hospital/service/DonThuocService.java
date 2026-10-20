@@ -92,7 +92,7 @@ public class DonThuocService {
         }
         DonThuoc dt = dtOpt.get();
         if ("DISPENSED".equalsIgnoreCase(dt.getTrangThai())) {
-            throw new IllegalStateException("Thu?c này dã du?c c?p phát r?i!");
+            throw new IllegalStateException("Thuốc này đã được cấp phát rồi!");
         }
                 // KIỂM TRA THANH TOÁN VIỆN PHÍ TRƯỚC KHI XUẤT THUỐC
         if (dt.getMaPhieuKham() != null) {
