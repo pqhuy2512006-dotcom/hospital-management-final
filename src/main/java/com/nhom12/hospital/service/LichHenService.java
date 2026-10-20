@@ -60,7 +60,7 @@ public class LichHenService {
         // Khung giờ sáng: 08:00 - 11:30
         generateSlots(availableSlots, existing, kDate, LocalTime.of(8, 0), LocalTime.of(11, 30), duration);
         // Khung giờ chiều: 13:00 - 16:30
-        generateSlots(availableSlots, existing, kDate, LocalTime.of(13, 0), LocalTime.of(16, 30), duration);
+        generateSlots(availableSlots, existing, kDate, LocalTime.of(13, 0), LocalTime.of(23, 00), duration);
 
         return availableSlots;
     }

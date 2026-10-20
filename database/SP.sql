@@ -1,7 +1,7 @@
 use QuanLyBenhVien 
 go
 
-
+-- Tính Năng Phát thông báo của admin
 CREATE PROCEDURE dbo.sp_ThongBao_Broadcast  
     @TieuDe NVARCHAR(200),  
     @NoiDung NVARCHAR(1000),  

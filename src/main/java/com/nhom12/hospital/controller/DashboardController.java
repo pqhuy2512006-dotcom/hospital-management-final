@@ -23,6 +23,7 @@ public class DashboardController {
         this.dashboardService = dashboardService;
     }
 
+    //
     @GetMapping("/stats")
     public ResponseEntity<Map<String, Object>> getStats(
             @RequestParam LocalDate from,

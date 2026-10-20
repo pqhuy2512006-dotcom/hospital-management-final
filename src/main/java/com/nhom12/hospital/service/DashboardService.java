@@ -36,10 +36,12 @@ public class DashboardService {
         LocalDateTime fromTime = from.atStartOfDay();
         LocalDateTime toExclusive = to.plusDays(1).atStartOfDay();
 
+        // Lọc các Phiếu khám theo thời gian
         List<PhieuKham> visits = phieuKhamRepository
                 .findByNgayKhamGreaterThanEqualAndNgayKhamLessThan(
                         fromTime, toExclusive);
 
+        // Tính tổng các trị các hóa đơn 
         List<HoaDon> paidInvoices = hoaDonRepository
                 .findByTrangThaiTTAndNgayThanhToanGreaterThanEqualAndNgayThanhToanLessThan(
                         "DaThanhToan",
@@ -53,6 +55,7 @@ public class DashboardService {
                                 : invoice.getBhytChiTra()))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
+        // Lọc theo các chuẩn đoán khác nhau
         Map<String, Long> diagnosisCounts = new HashMap<>();
 
         visits.stream()

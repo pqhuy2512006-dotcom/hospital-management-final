@@ -145,7 +145,7 @@ public class LichHenController {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
         }
     }
-
+    
     @PostMapping("/{id}/start")
     public ResponseEntity<?> startExamination(@PathVariable String id, HttpServletRequest request) {
         Long accountId = (Long) request.getAttribute(SessionAttributes.ACCOUNT_ID);
