@@ -39,7 +39,7 @@ CREATE TABLE TaiKhoan (
     Email           VARCHAR(100)         NULL UNIQUE,
     SoDienThoai     VARCHAR(15)          NOT NULL,
     VaiTro          VARCHAR(20)          NOT NULL 
-                    CHECK (VaiTro IN ('BacSi','DieuDuong','LeTan','DuocSi','KTV','ThuNgan','QuanTri','QuanLyNhanSu','GiamDoc','BenhNhan')),
+                    CHECK (VaiTro IN ('BacSi','DieuDuong','LeTan','DuocSi','KTV','ThuNgan','QuanTri','QuanLyNhanSu','BenhNhan')),
     TrangThai       BIT                  NOT NULL DEFAULT 1,
     NgayTao         DATETIME             NOT NULL DEFAULT GETDATE()
 );
@@ -82,12 +82,12 @@ CREATE TABLE NhanVien (
     SoCCCD              VARCHAR(12)      NULL,
     SoDienThoai         VARCHAR(15)      NOT NULL,
     Email               VARCHAR(100)     NULL,
-    DiaChi              NVARCHAR(200)    NULL,
+    MaPhong              NVARCHAR(200)    NULL,
     ChungChiHanhNghe    VARCHAR(50)      NULL,
     TrinhDoChuyenMon    NVARCHAR(100)    NULL,
     NgayVaoLam          DATE             NULL,
     VaiTro              VARCHAR(20)      NOT NULL 
-                        CHECK (VaiTro IN ('BacSi','DieuDuong','LeTan','DuocSi','KTV','ThuNgan','QuanTri','QuanLyNhanSu','GiamDoc')),
+                        CHECK (VaiTro IN ('BacSi','DieuDuong','LeTan','DuocSi','KTV','ThuNgan','QuanTri','QuanLyNhanSu')),
     TrangThai           VARCHAR(20)      NOT NULL DEFAULT 'DangLamViec' 
                         CHECK (TrangThai IN ('DangLamViec','DaNghi')),
     CONSTRAINT FK_NhanVien_TaiKhoan FOREIGN KEY (MaTaiKhoan) REFERENCES TaiKhoan(MaTaiKhoan),
