@@ -1,4 +1,7 @@
--- Views
+﻿/* ======================================================================
+   02_Views.sql
+   Database [QuanLyBenhVien] - Views (22 Views)
+   ====================================================================== */
 USE [QuanLyBenhVien];
 GO
 
@@ -6,56 +9,56 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_AuditLog AS SELECT * FROM dbo.AuditLog;
+CREATE OR ALTER VIEW dbo.vw_AuditLog AS SELECT * FROM dbo.AuditLog;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_BenhNhan AS SELECT * FROM dbo.BenhNhan;
+CREATE OR ALTER VIEW dbo.vw_BenhNhan AS SELECT * FROM dbo.BenhNhan;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_ChiTietHoaDon AS SELECT * FROM dbo.ChiTietHoaDon;
+CREATE OR ALTER VIEW dbo.vw_ChiTietHoaDon AS SELECT * FROM dbo.ChiTietHoaDon;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_ChiTietKetQuaCLS AS SELECT * FROM dbo.ChiTietKetQuaCLS;
+CREATE OR ALTER VIEW dbo.vw_ChiTietKetQuaCLS AS SELECT * FROM dbo.ChiTietKetQuaCLS;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_ChiTietNhapKho AS SELECT * FROM dbo.ChiTietNhapKho;
+CREATE OR ALTER VIEW dbo.vw_ChiTietNhapKho AS SELECT * FROM dbo.ChiTietNhapKho;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_DichVuCLS AS SELECT * FROM dbo.DichVuCLS;
-GO
-
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER OFF;
-GO
-CREATE   VIEW dbo.vw_DonThuoc AS SELECT * FROM dbo.DonThuoc;
+CREATE OR ALTER VIEW dbo.vw_DichVuCLS AS SELECT * FROM dbo.DichVuCLS;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_GiuongBenh AS
+CREATE OR ALTER VIEW dbo.vw_DonThuoc AS SELECT * FROM dbo.DonThuoc;
+GO
+
+SET ANSI_NULLS ON;
+GO
+SET QUOTED_IDENTIFIER ON;
+GO
+CREATE OR ALTER VIEW dbo.vw_GiuongBenh AS
 SELECT 
     g.MaGiuong,
     g.MaPhong,
@@ -72,22 +75,21 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_HoaDon AS SELECT * FROM dbo.HoaDon;
+CREATE OR ALTER VIEW dbo.vw_HoaDon AS SELECT * FROM dbo.HoaDon;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_KetQuaCLS AS SELECT * FROM dbo.KetQuaCLS;
+CREATE OR ALTER VIEW dbo.vw_KetQuaCLS AS SELECT * FROM dbo.KetQuaCLS;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
--- 2. Tạo/Cập nhật View vw_Khoa
-CREATE   VIEW dbo.vw_Khoa AS
+CREATE OR ALTER VIEW dbo.vw_Khoa AS
 SELECT 
     k.MaKhoa, 
     k.TenKhoa, 
@@ -103,49 +105,49 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_LichHen AS SELECT * FROM dbo.LichHen;
+CREATE OR ALTER VIEW dbo.vw_LichHen AS SELECT * FROM dbo.LichHen;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_LichTruc AS SELECT * FROM dbo.LichTruc;
+CREATE OR ALTER VIEW dbo.vw_LichTruc AS SELECT * FROM dbo.LichTruc;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_NhanVien AS SELECT * FROM dbo.NhanVien;
+CREATE OR ALTER VIEW dbo.vw_NhanVien AS SELECT * FROM dbo.NhanVien;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_NoiTru AS SELECT * FROM dbo.NoiTru;
+CREATE OR ALTER VIEW dbo.vw_NoiTru AS SELECT * FROM dbo.NoiTru;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_PhieuKham AS SELECT * FROM dbo.PhieuKham;
+CREATE OR ALTER VIEW dbo.vw_PhieuKham AS SELECT * FROM dbo.PhieuKham;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_PhieuNhapKho AS SELECT * FROM dbo.PhieuNhapKho;
+CREATE OR ALTER VIEW dbo.vw_PhieuNhapKho AS SELECT * FROM dbo.PhieuNhapKho;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_Phong AS
+CREATE OR ALTER VIEW dbo.vw_Phong AS
 SELECT 
     p.MaPhong,
     p.TenPhong,
@@ -161,7 +163,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_TaiKhoan
+CREATE OR ALTER VIEW dbo.vw_TaiKhoan
 AS
     SELECT MaTaiKhoan, TenDangNhap, MatKhauHash, Email, SoDienThoai, VaiTro, TrangThai, NgayTao
     FROM dbo.TaiKhoan;
@@ -169,10 +171,9 @@ GO
 
 SET ANSI_NULLS ON;
 GO
-SET QUOTED_IDENTIFIER OFF;
+SET QUOTED_IDENTIFIER ON;
 GO
-
-CREATE VIEW dbo.vw_ThongBao AS
+CREATE OR ALTER VIEW dbo.vw_ThongBao AS
 SELECT * FROM dbo.ThongBao;
 GO
 
@@ -180,12 +181,13 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_Thuoc AS SELECT * FROM dbo.Thuoc;
+CREATE OR ALTER VIEW dbo.vw_Thuoc AS SELECT * FROM dbo.Thuoc;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   VIEW dbo.vw_YeuCauChuyenKhoa AS SELECT * FROM dbo.YeuCauChuyenKhoa;
+CREATE OR ALTER VIEW dbo.vw_YeuCauChuyenKhoa AS SELECT * FROM dbo.YeuCauChuyenKhoa;
 GO
+

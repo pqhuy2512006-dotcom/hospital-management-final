@@ -1,4 +1,7 @@
--- Stored procedures
+﻿/* ======================================================================
+   04_StoredProcedures.sql
+   Database [QuanLyBenhVien] - Stored Procedures (15 Procedures)
+   ====================================================================== */
 USE [QuanLyBenhVien];
 GO
 
@@ -6,8 +9,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-
-CREATE   PROCEDURE dbo.sp_GiuongBenh_Save
+CREATE OR ALTER PROCEDURE dbo.sp_GiuongBenh_Save
     @MaGiuong VARCHAR(15) = NULL,
     @MaPhong VARCHAR(15) = NULL,
     @SoGiuong NVARCHAR(50),
@@ -43,7 +45,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   PROCEDURE dbo.sp_GiuongBenh_ToggleStatus
+CREATE OR ALTER PROCEDURE dbo.sp_GiuongBenh_ToggleStatus
     @MaGiuong VARCHAR(15)
 AS
 BEGIN
@@ -62,7 +64,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   PROCEDURE dbo.sp_Khoa_Save
+CREATE OR ALTER PROCEDURE dbo.sp_Khoa_Save
     @MaKhoa VARCHAR(10),
     @TenKhoa NVARCHAR(100),
     @MoTa NVARCHAR(300) = NULL
@@ -87,7 +89,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE PROCEDURE dbo.sp_Khoa_ToggleStatus  
+CREATE OR ALTER PROCEDURE dbo.sp_Khoa_ToggleStatus  
     @MaKhoa VARCHAR(10)  
 AS  
 BEGIN  
@@ -162,7 +164,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   PROCEDURE dbo.sp_Phong_Save
+CREATE OR ALTER PROCEDURE dbo.sp_Phong_Save
     @MaPhong VARCHAR(15),
     @TenPhong NVARCHAR(100),
     @LoaiPhong VARCHAR(20),
@@ -188,7 +190,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   PROCEDURE dbo.sp_Phong_ToggleStatus
+CREATE OR ALTER PROCEDURE dbo.sp_Phong_ToggleStatus
     @MaPhong VARCHAR(15)
 AS
 BEGIN
@@ -222,20 +224,17 @@ GO
 
 SET ANSI_NULLS ON;
 GO
-SET QUOTED_IDENTIFIER OFF;
+SET QUOTED_IDENTIFIER ON;
 GO
-
--- Stored Procedure: Tá»± Ä‘á»™ng nháº¯c lá»‹ch háº¹n ngÃ y mai
-CREATE PROCEDURE dbo.sp_TaoThongBaoNhacLich
+CREATE OR ALTER PROCEDURE dbo.sp_TaoThongBaoNhacLich
 AS
 BEGIN
     SET NOCOUNT ON;
-    
     INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao)
     SELECT 
         tk.MaTaiKhoan,
-        N'Nháº¯c nhá»Ÿ lá»‹ch háº¹n khÃ¡m bá»‡nh',
-        N'Báº¡n cÃ³ lá»‹ch khÃ¡m vÃ o ngÃ y mai lÃºc ' + CONVERT(VARCHAR(5), lh.GioKham, 108) + N'. Vui lÃ²ng cÃ³ máº·t Ä‘Ãºng giá» Ä‘á»ƒ Ä‘Æ°á»£c phá»¥c vá»¥ tá»‘t nháº¥t.',
+        N'Nhắc nhở lịch hẹn khám bệnh',
+        N'Bạn có lịch khám vào ngày mai lúc ' + CONVERT(VARCHAR(5), lh.GioKham, 108) + N'. Vui lòng có mặt đúng giờ để được phục vụ tốt nhất.',
         'NHAC_LICH'
     FROM dbo.LichHen lh
     JOIN dbo.BenhNhan bn ON lh.MaBenhNhan = bn.MaBenhNhan
@@ -256,7 +255,7 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 -- 
-CREATE   PROCEDURE dbo.sp_ThongBao_Broadcast
+CREATE OR ALTER PROCEDURE dbo.sp_ThongBao_Broadcast
     @TieuDe NVARCHAR(200),
     @NoiDung NVARCHAR(1000),
     @LoaiThongBao VARCHAR(50),
@@ -295,7 +294,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   PROCEDURE dbo.sp_ThongBao_Create
+CREATE OR ALTER PROCEDURE dbo.sp_ThongBao_Create
     @MaTaiKhoan BIGINT,
     @TieuDe NVARCHAR(200),
     @NoiDung NVARCHAR(1000),
@@ -311,15 +310,14 @@ GO
 
 SET ANSI_NULLS ON;
 GO
-SET QUOTED_IDENTIFIER OFF;
+SET QUOTED_IDENTIFIER ON;
 GO
-
--- Stored Procedure Ä‘Ã¡nh dáº¥u Ä‘Ã£ Ä‘á»c
-CREATE PROCEDURE dbo.sp_ThongBao_MarkRead
+CREATE OR ALTER PROCEDURE dbo.sp_ThongBao_MarkRead
     @MaThongBao INT,
     @MaTaiKhoan BIGINT
 AS
 BEGIN
+    SET NOCOUNT ON;
     UPDATE dbo.ThongBao
     SET DaDoc = 1
     WHERE MaThongBao = @MaThongBao AND MaTaiKhoan = @MaTaiKhoan;
@@ -328,79 +326,88 @@ GO
 
 SET ANSI_NULLS ON;
 GO
-SET QUOTED_IDENTIFIER OFF;
+SET QUOTED_IDENTIFIER ON;
 GO
-
--- =========================================================================
--- 2. PROCEDURE TIáº¾P NHáº¬N Bá»†NH NHÃ‚N (Xá»¬ LÃ ÄI TRá»„ > 10 PHÃšT)
--- =========================================================================
-CREATE   PROCEDURE sp_TiepNhanBenhNhan
+CREATE OR ALTER PROCEDURE sp_TiepNhanBenhNhan
     @MaLichHen VARCHAR(15),
-    @MaPhieuKham VARCHAR(15), -- Frontend truyá»n xuá»‘ng hoáº·c tá»± sinh
+    @MaPhieuKham VARCHAR(15), -- Frontend truyền xuống hoặc tự sinh
     @MaBacSi VARCHAR(15),
     @MaKhoa VARCHAR(10)
 AS
 BEGIN
     SET NOCOUNT ON;
-    
+
     DECLARE @GioHen DATETIME;
     DECLARE @TrangThai VARCHAR(20);
     DECLARE @MaBenhNhan VARCHAR(15);
     DECLARE @DelayMinutes INT;
-    
-    -- Láº¥y thÃ´ng tin lá»‹ch háº¹n
+
+    -- Lấy thông tin lịch hẹn
     SELECT @GioHen = CAST(NgayKham AS DATETIME) + CAST(GioKham AS DATETIME),
            @TrangThai = TrangThai,
            @MaBenhNhan = MaBenhNhan
     FROM dbo.LichHen
     WHERE MaLichHen = @MaLichHen;
-    
+
     IF @TrangThai <> 'DangChoKham'
     BEGIN
-        RAISERROR(N'Lá»‹ch háº¹n khÃ´ng á»Ÿ tráº¡ng thÃ¡i há»£p lá»‡ Ä‘á»ƒ tiáº¿p nháº­n.', 16, 1);
+        RAISERROR(N'Lịch hẹn không ở trạng thái hợp lệ để tiếp nhận.', 16, 1);
         RETURN;
     END
 
-    
-    -- TÃ­nh sá»‘ phÃºt trá»… (khoáº£ng cÃ¡ch tá»« lÃºc háº¹n Ä‘áº¿n hiá»‡n táº¡i)
-    SET @DelayMinutes = DATEDIFF(MINUTE, @GioHen, GETDATE());
-    
-    -- Kiá»ƒm tra náº¿u bÃ¡c sÄ© gá»i khÃ¡m quÃ¡ sá»›m (trÆ°á»›c giá» háº¹n)
-    IF @DelayMinutes < 0
+    -- Kiểm tra xem bác sĩ này có đang khám dở ca nào chưa hoàn tất không
+    IF EXISTS (
+    SELECT 1 FROM dbo.LichHen 
+    WHERE MaBacSi = @MaBacSi AND TrangThai = 'DangKham'
+    )
     BEGIN
-        RAISERROR(N'ChÆ°a tá»›i giá» háº¹n. KhÃ´ng thá»ƒ báº¯t Ä‘áº§u khÃ¡m sá»›m hÆ¡n lá»‹ch trÃ¬nh Ä‘Æ°á»£c xáº¿p!', 16, 1);
-        RETURN;
+    RAISERROR(N'Bác sĩ đang có một ca bệnh đang khám. Vui lòng bấm Hoàn tất khám ca hiện tại trước khi gọi bệnh nhân mới!', 16, 1);
+    RETURN;
     END
 
-    -- Náº¿u Ä‘áº¿n trá»… quÃ¡ 10 phÃºt, Tá»° Äá»˜NG Há»¦Y
+    -- Tính số phút trễ (khoảng cách từ lúc hẹn đến hiện tại)
+    SET @DelayMinutes = DATEDIFF(MINUTE, @GioHen, GETDATE());
+
+    -- Kiểm tra nếu bác sĩ gọi khám quá sớm (trước giờ hẹn)
+    /*IF @DelayMinutes < 0
+    BEGIN
+        RAISERROR(N'Chưa tới giờ hẹn. Không thể bắt đầu khám sớm hơn lịch trình được xếp!', 16, 1);
+        RETURN;
+    END
+    */
+
+    -- Nếu đến trễ quá 10 phút, tự động hủy
     IF @DelayMinutes > 10
     BEGIN
-        UPDATE dbo.LichHen 
+        UPDATE dbo.LichHen
         SET TrangThai = 'DaHuy'
         WHERE MaLichHen = @MaLichHen;
-        
-        RAISERROR(N'Bá»‡nh nhÃ¢n Ä‘Ã£ Ä‘áº¿n trá»… quÃ¡ 10 phÃºt. Lá»‹ch háº¹n Ä‘Ã£ bá»‹ tá»± Ä‘á»™ng há»§y!', 16, 1);
+
+        RAISERROR(N'Bệnh nhân đã đến trễ quá 10 phút. Lịch hẹn đã bị tự động hủy!', 16, 1);
         RETURN;
     END
-    
-    -- Náº¿u há»£p lá»‡ (<= 10 phÃºt), táº¡o phiáº¿u khÃ¡m vÃ  chuyá»ƒn tráº¡ng thÃ¡i
+
+    -- Nếu hợp lệ (<= 10 phút), tạo phiếu khám và chuyển trạng thái
     BEGIN TRY
         BEGIN TRANSACTION;
-        
-        -- Cáº­p nháº­t Lá»‹ch háº¹n
+
+        -- Cập nhật lịch hẹn
         UPDATE dbo.LichHen
         SET TrangThai = 'DangKham'
         WHERE MaLichHen = @MaLichHen;
-        
-        -- Táº¡o Phiáº¿u khÃ¡m (vá»›i NgayKham = GETDATE() máº·c Ä‘á»‹nh lÃ m thá»i Ä‘iá»ƒm báº¯t Ä‘áº§u)
-        INSERT INTO dbo.PhieuKham (MaPhieuKham, MaBenhNhan, MaBacSi, MaKhoa, MaLichHen, NgayKham)
-        VALUES (@MaPhieuKham, @MaBenhNhan, @MaBacSi, @MaKhoa, @MaLichHen, GETDATE());
-        
+
+        -- Tạo phiếu khám (với NgayKham = GETDATE() làm thời điểm bắt đầu)
+        INSERT INTO dbo.PhieuKham
+            (MaPhieuKham, MaBenhNhan, MaBacSi, MaKhoa, MaLichHen, NgayKham)
+        VALUES
+            (@MaPhieuKham, @MaBenhNhan, @MaBacSi, @MaKhoa, @MaLichHen, GETDATE());
+
         COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0
             ROLLBACK TRANSACTION;
+
         THROW;
     END CATCH
 END;
@@ -410,8 +417,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-
-CREATE   PROCEDURE dbo.usp_Entity_Delete
+CREATE OR ALTER PROCEDURE dbo.usp_Entity_Delete
     @EntityName SYSNAME,
     @IdValue NVARCHAR(4000)
 AS
@@ -465,8 +471,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-
-CREATE   PROCEDURE dbo.usp_Entity_Save
+CREATE OR ALTER PROCEDURE dbo.usp_Entity_Save
     @EntityName SYSNAME,
     @Payload NVARCHAR(MAX)
 AS
@@ -574,7 +579,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   PROCEDURE dbo.usp_TaiKhoan_Insert
+CREATE OR ALTER PROCEDURE dbo.usp_TaiKhoan_Insert
     @TenDangNhap VARCHAR(50),
     @MatKhauHash VARCHAR(255),
     @Email VARCHAR(100) = NULL,
@@ -598,7 +603,7 @@ SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
-CREATE   PROCEDURE dbo.usp_TaiKhoan_Update
+CREATE OR ALTER PROCEDURE dbo.usp_TaiKhoan_Update
     @MaTaiKhoan BIGINT,
     @MatKhauHash VARCHAR(255),
     @Email VARCHAR(100) = NULL,
@@ -620,3 +625,4 @@ BEGIN
     WHERE MaTaiKhoan = @MaTaiKhoan;
 END;
 GO
+
