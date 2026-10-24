@@ -4,6 +4,7 @@ import com.nhom12.hospital.entity.NoiTru;
 import com.nhom12.hospital.repository.BenhNhanRepository;
 import com.nhom12.hospital.repository.GiuongBenhRepository;
 import com.nhom12.hospital.repository.NoiTruRepository;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.nhom12.hospital.entity.BenhNhan;
@@ -44,7 +45,7 @@ public class NoiTruService {
     private final YeuCauChuyenKhoaRepository yeuCauChuyenKhoaRepository;
     private final PhongRepository phongRepository;
     private final HoaDonRepository hoaDonRepository;
-    private final ChiTietHoaDonRepository chiTietHoaDonRepository; 
+    private final ChiTietHoaDonRepository chiTietHoaDonRepository;
 
     public NoiTruService(NoiTruRepository noiTruRepository,
                          BenhNhanRepository benhNhanRepository,
@@ -54,8 +55,8 @@ public class NoiTruService {
                          KhoaRepository khoaRepository,
                          YeuCauChuyenKhoaRepository yeuCauChuyenKhoaRepository,
                          PhongRepository phongRepository,
-                         HoaDonRepository hoaDonRepository, 
-                         ChiTietHoaDonRepository chiTietHoaDonRepository) { 
+                         HoaDonRepository hoaDonRepository,
+                         ChiTietHoaDonRepository chiTietHoaDonRepository) {
         this.noiTruRepository = noiTruRepository;
         this.benhNhanRepository = benhNhanRepository;
         this.giuongBenhRepository = giuongBenhRepository;
@@ -64,8 +65,8 @@ public class NoiTruService {
         this.khoaRepository = khoaRepository;
         this.yeuCauChuyenKhoaRepository = yeuCauChuyenKhoaRepository;
         this.phongRepository = phongRepository;
-        this.hoaDonRepository = hoaDonRepository; 
-        this.chiTietHoaDonRepository = chiTietHoaDonRepository; 
+        this.hoaDonRepository = hoaDonRepository;
+        this.chiTietHoaDonRepository = chiTietHoaDonRepository;
     }
 
     public List<Map<String, Object>> getAll() {
@@ -100,7 +101,7 @@ public class NoiTruService {
         return res;
     }
 
-        public NoiTru nhapVien(NoiTru noiTru) {
+    public NoiTru nhapVien(NoiTru noiTru) {
         return nhapVien(noiTru, null);
     }
 
@@ -120,11 +121,10 @@ public class NoiTruService {
         GiuongBenh giuong = giuongBenhRepository.findById(noiTru.getMaGiuong())
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy giường bệnh: " + noiTru.getMaGiuong()));
 
-        if (!"Trong".equalsIgnoreCase(giuong.getTrangThai())) {
-            throw new IllegalArgumentException("Giường " + giuong.getSoGiuong() + " hiện không còn trống (Trạng thái: " + giuong.getTrangThai() + ").");
-            
+        if ("BaoTri".equalsIgnoreCase(giuong.getTrangThai())) {
+            throw new IllegalArgumentException("Giường " + giuong.getSoGiuong() + " hiện đang bảo trì.");
         }
- if (giuong.getMaPhong() != null) {
+        if (giuong.getMaPhong() != null) {
             Optional<Phong> phongOpt = phongRepository.findById(giuong.getMaPhong());
             if (phongOpt.isPresent() && Boolean.FALSE.equals(phongOpt.get().getTrangThai())) {
                 String tenPhong = phongOpt.get().getTenPhong() != null ? phongOpt.get().getTenPhong() : phongOpt.get().getMaPhong();
@@ -134,7 +134,7 @@ public class NoiTruService {
         // 1. Kiểm tra bệnh nhân có đang nằm giường khác hay không
         Optional<NoiTru> activeStay = noiTruRepository.findActiveByMaBenhNhan(maBn);
         if (activeStay.isPresent()) {
-            throw new IllegalArgumentException("Bệnh nhân " + bn.getHoTen() + " hiện đang nằm điều trị tại giường " 
+            throw new IllegalArgumentException("Bệnh nhân " + bn.getHoTen() + " hiện đang nằm điều trị tại giường "
                     + activeStay.get().getMaGiuong() + ". Không thể xếp thêm giường mới.");
         }
 
@@ -177,8 +177,8 @@ public class NoiTruService {
                     throw new IllegalArgumentException("Bệnh nhân " + bn.getHoTen() + " (" + maBn + ") chưa có phiếu khám bệnh nào tại bệnh viện.");
                 } else {
                     String tenKhoaKham = khoaRepository.findById(latestPk.getMaKhoa()).map(Khoa::getTenKhoa).orElse(latestPk.getMaKhoa());
-                    throw new IllegalArgumentException("Bệnh nhân " + bn.getHoTen() + " (" + maBn + ") hiện thuộc " + tenKhoaKham 
-                            + " (Phiếu khám: " + latestPk.getMaPhieuKham() + "). Không thể xếp vào " 
+                    throw new IllegalArgumentException("Bệnh nhân " + bn.getHoTen() + " (" + maBn + ") hiện thuộc " + tenKhoaKham
+                            + " (Phiếu khám: " + latestPk.getMaPhieuKham() + "). Không thể xếp vào "
                             + tenKhoaGiuong + " khi chưa có yêu cầu chuyển khoa được duyệt.");
                 }
             }
@@ -195,18 +195,22 @@ public class NoiTruService {
         }
         noiTru.setMaPhieuKham(maPhieuKhamHopLe);
 
-        // Cập nhật trạng thái giường sang 'DangSuDung'
-        giuong.setTrangThai("DangSuDung");
-        giuongBenhRepository.save(giuong);
-
-        return noiTruRepository.save(noiTru);
+        // Để Trigger SQL TRG_CapNhatTrangThaiGiuong tự động kiểm tra trùng giường và cập nhật trạng thái giường sang 'DangSuDung'
+        try {
+            return noiTruRepository.save(noiTru);
+        } catch (DataAccessException e) {
+            Throwable cause = e.getMostSpecificCause();
+            String msg = cause != null && cause.getMessage() != null ? cause.getMessage() : e.getMessage();
+            throw new IllegalStateException(msg);
+        }
     }
 
-        public Optional<Map<String, Object>> xuatVien(String id) {
+    public Optional<Map<String, Object>> xuatVien(String id) {
         return noiTruRepository.findById(id).map(nt -> {
             LocalDateTime now = LocalDateTime.now();
             nt.setTrangThai("DaXuatVien");
             nt.setNgayXuatVien(now);
+            // Trigger SQL TRG_CapNhatTrangThaiGiuong sẽ tự động trả trạng thái giường về 'Trong'
             noiTruRepository.save(nt);
 
             // 1. Tính số ngày nằm viện (tối thiểu 1 ngày)
@@ -224,9 +228,6 @@ public class NoiTruService {
                 if (g.getDonGiaNgay() != null && g.getDonGiaNgay().compareTo(BigDecimal.ZERO) > 0) {
                     donGiaNgay = g.getDonGiaNgay();
                 }
-                // Trả giường về trạng thái 'Trong'
-                g.setTrangThai("Trong");
-                giuongBenhRepository.save(g);
             }
 
             // 3. Tính tiền và áp dụng BHYT
@@ -274,4 +275,3 @@ public class NoiTruService {
         });
     }
 }
-

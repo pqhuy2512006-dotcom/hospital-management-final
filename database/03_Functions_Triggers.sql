@@ -198,21 +198,21 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Kiểm tra khi dược sĩ cập nhật trạng thái đơn thuốc sang 'COMPLETED'
+    -- Kiểm tra khi dược sĩ cập nhật trạng thái đơn thuốc sang 'DISPENSED'
     IF UPDATE(TrangThai)
     BEGIN
         IF EXISTS (
             SELECT 1
             FROM inserted i
             JOIN deleted d ON i.MaDonThuoc = d.MaDonThuoc
-            WHERE i.TrangThai = 'COMPLETED' 
-              AND ISNULL(d.TrangThai, '') <> 'COMPLETED'
+            WHERE i.TrangThai IN ('DISPENSED', 'COMPLETED')
+              AND ISNULL(d.TrangThai, '') NOT IN ('DISPENSED', 'COMPLETED')
               AND NOT EXISTS (
                   -- Kiểm tra xem phiếu khám này đã có hóa đơn thanh toán thành công chưa
                   SELECT 1 
                   FROM dbo.HoaDon hd
                   WHERE hd.MaPhieuKham = i.MaPhieuKham
-                    AND hd.TrangThaiTT = 'Da Thanh Toan'
+                    AND hd.TrangThaiTT = 'DaThanhToan'
               )
         )
         BEGIN

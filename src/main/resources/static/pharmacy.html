@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
@@ -828,24 +828,24 @@
                     statusHtml = '<span class="badge-status" style="background:#fee2e2; color:#dc2626; font-weight:700;"><i class="fa-solid fa-circle-exclamation"></i> Chưa đóng tiền</span>';
                 }
 
-                // Nút hành động
+                // Nút hành động (Trigger SQL trg_KiemTraThanhToanTruocKhiPhatThuoc sẽ chặn nếu chưa đóng tiền)
                 let actionHtml = '';
                 if (p.status === 'DISPENSED') {
                     actionHtml = '<span style="color:#10b981; font-weight:600;"><i class="fa-solid fa-check-double"></i> Đã hoàn tất</span>';
-                } else if (!isPaid) {
-                    // Chưa đóng tiền -> Khóa nút bấm lại (disabled)
-                    actionHtml = '<button class="btn-dispense" disabled style="background:#e2e8f0; color:#94a3b8; cursor:not-allowed;" title="Bệnh nhân chưa đóng viện phí, không thể xuất thuốc"><i class="fa-solid fa-ban"></i> Chờ đóng tiền</button>';
                 } else {
-                    // Đã đóng tiền -> Cho phép Dược sĩ bấm xuất thuốc
                     actionHtml = `<button class="btn-dispense" onclick="dispenseDrug('${p.id}')"><i class="fa-solid fa-box-open"></i> Xuất Thuốc (Trừ Tồn)</button>`;
                 }
+
+                const totalMedFee = p.tongTienThuocPhieuKham != null
+                    ? `<div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">Tổng tiền thuốc PK: <strong>${Number(p.tongTienThuocPhieuKham).toLocaleString('vi-VN')} đ</strong></div>`
+                    : '';
 
                 tbody.innerHTML += `
                     <tr>
                         <td><span class="badge-code">${p.id}</span></td>
                         <td><strong>${p.patientName || p.patientId || 'Bệnh nhân'}</strong></td>
                         <td>${p.doctor || 'Bác sĩ kê đơn'}</td>
-                        <td><strong>${p.drugName || p.drugId}</strong>: ${p.qty} viên</td>
+                        <td><strong>${p.drugName || p.drugId}</strong>: ${p.qty} ${p.unit || 'viên'}${totalMedFee}</td>
                         <td>${statusHtml}</td>
                         <td>${actionHtml}</td>
                     </tr>

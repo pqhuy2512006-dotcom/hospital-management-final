@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,6 +43,15 @@ public class DonThuocRepository {
                 ROW_MAPPER,
                 maPhieuKham
         );
+    }
+
+    public BigDecimal tinhTongTienThuocTheoPhieuKham(String maPhieuKham) {
+        BigDecimal total = jdbcTemplate.queryForObject(
+                "SELECT dbo.fn_TinhTongTienThuocTheoPhieuKham(?)",
+                BigDecimal.class,
+                maPhieuKham
+        );
+        return total != null ? total : BigDecimal.ZERO;
     }
 
     public DonThuoc save(DonThuoc prescription) {

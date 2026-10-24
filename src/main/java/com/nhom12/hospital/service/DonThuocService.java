@@ -9,16 +9,17 @@ import com.nhom12.hospital.repository.NhanVienRepository;
 import com.nhom12.hospital.repository.PhieuKhamRepository;
 import com.nhom12.hospital.repository.ThuocRepository;
 import com.nhom12.hospital.repository.ChiTietNhapKhoRepository;
+import com.nhom12.hospital.repository.HoaDonRepository;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.nhom12.hospital.entity.HoaDon;
-import com.nhom12.hospital.repository.HoaDonRepository;
+
 import java.util.*;
 
 @Service
 public class DonThuocService {
 
-        private final DonThuocRepository donThuocRepository;
+    private final DonThuocRepository donThuocRepository;
     private final PhieuKhamRepository phieuKhamRepository;
     private final ThuocRepository thuocRepository;
     private final BenhNhanRepository benhNhanRepository;
@@ -71,8 +72,9 @@ public class DonThuocService {
                     map.put("doctor", nv.getHoTen());
                 });
             });
-            
-                if (dt.getMaPhieuKham() != null) {
+
+            if (dt.getMaPhieuKham() != null) {
+                map.put("tongTienThuocPhieuKham", donThuocRepository.tinhTongTienThuocTheoPhieuKham(dt.getMaPhieuKham()));
                 hoaDonRepository.findByMaPhieuKham(dt.getMaPhieuKham()).ifPresent(hd -> {
                     map.put("paymentStatus", hd.getTrangThaiTT());
                     map.put("invoiceId", hd.getMaHoaDon());
@@ -94,16 +96,7 @@ public class DonThuocService {
         if ("DISPENSED".equalsIgnoreCase(dt.getTrangThai())) {
             throw new IllegalStateException("Thuốc này đã được cấp phát rồi!");
         }
-                // KIỂM TRA THANH TOÁN VIỆN PHÍ TRƯỚC KHI XUẤT THUỐC
-        if (dt.getMaPhieuKham() != null) {
-            Optional<HoaDon> hdOpt = hoaDonRepository.findByMaPhieuKham(dt.getMaPhieuKham());
-            if (hdOpt.isPresent()) {
-                HoaDon hd = hdOpt.get();
-                if (!"DaThanhToan".equalsIgnoreCase(hd.getTrangThaiTT())) {
-                    throw new IllegalStateException("Bệnh nhân chưa thanh toán hóa đơn viện phí (" + hd.getMaHoaDon() + "). Vui lòng yêu cầu bệnh nhân thanh toán trước khi cấp phát thuốc!");
-                }
-            }
-        }
+
         Optional<Thuoc> drugOpt = thuocRepository.findById(dt.getMaThuoc());
         if (drugOpt.isEmpty()) {
             throw new IllegalArgumentException("Thuốc không tồn tại!");
@@ -112,13 +105,23 @@ public class DonThuocService {
         if (drug.getTonKhoHienTai() < dt.getSoLuong()) {
             throw new IllegalStateException("Số lượng tồn kho không đủ để xuất!");
         }
-        
+
+        // Cập nhật trạng thái đơn thuốc trước để kích hoạt Trigger SQL trg_KiemTraThanhToanTruocKhiPhatThuoc
+        try {
+            dt.setTrangThai("DISPENSED");
+            donThuocRepository.save(dt);
+        } catch (DataAccessException e) {
+            Throwable cause = e.getMostSpecificCause();
+            String msg = cause != null && cause.getMessage() != null ? cause.getMessage() : e.getMessage();
+            throw new IllegalStateException(msg);
+        }
+
         // Thực hiện FEFO
         int remainingToDispense = dt.getSoLuong();
         List<ChiTietNhapKho> batches = chiTietNhapKhoRepository.findByMaThuocForFEFO(dt.getMaThuoc());
         for (ChiTietNhapKho batch : batches) {
             if (remainingToDispense <= 0) break;
-            
+
             int batchStock = batch.getSoLuongTon();
             if (batchStock >= remainingToDispense) {
                 batch.setSoLuongTon(batchStock - remainingToDispense);
@@ -130,13 +133,10 @@ public class DonThuocService {
                 remainingToDispense -= batchStock;
             }
         }
-        
+
         drug.setTonKhoHienTai(drug.getTonKhoHienTai() - dt.getSoLuong());
         thuocRepository.save(drug);
-        dt.setTrangThai("DISPENSED");
-        donThuocRepository.save(dt);
+
         return Map.of("success", true, "message", "Đã xuất thuốc thành công!", "tonKhoMoi", drug.getTonKhoHienTai());
     }
 }
-
-

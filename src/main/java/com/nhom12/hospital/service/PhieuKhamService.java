@@ -24,6 +24,7 @@ public class PhieuKhamService {
     private final BenhNhanRepository benhNhanRepository;
     private final NhanVienRepository nhanVienRepository;
     private final KhoaRepository khoaRepository;
+
     public PhieuKhamService(PhieuKhamRepository phieuKhamRepository,
                             DonThuocRepository donThuocRepository,
                             ThuocRepository thuocRepository,
@@ -34,9 +35,9 @@ public class PhieuKhamService {
                             ChiTietHoaDonRepository chiTietHoaDonRepository,
                             BenhNhanRepository benhNhanRepository,
                             NhanVienRepository nhanVienRepository,
-                        KhoaRepository khoaRepository) {
+                            KhoaRepository khoaRepository) {
         this.phieuKhamRepository = phieuKhamRepository;
-        this.donThuocRepository = donThuocRepository;
+        this.donThuocRepository = phieuKhamRepository != null ? donThuocRepository : donThuocRepository;
         this.thuocRepository = thuocRepository;
         this.lichHenRepository = lichHenRepository;
         this.ketQuaCLSRepository = ketQuaCLSRepository;
@@ -69,6 +70,7 @@ public class PhieuKhamService {
             Map<String, Object> map = new HashMap<>();
             map.put("phieuKham", pk);
             map.put("donThuoc", donThuocRepository.findByMaPhieuKham(id));
+            map.put("tongTienThuoc", donThuocRepository.tinhTongTienThuocTheoPhieuKham(id));
             map.put("ketQuaCLS", ketQuaCLSRepository.findByMaPhieuKham(id));
             benhNhanRepository.findById(pk.getMaBenhNhan()).ifPresent(bn -> map.put("benhNhan", bn));
             return map;
@@ -91,9 +93,9 @@ public class PhieuKhamService {
                 || "DaKham".equalsIgnoreCase(appointmentOpt.get().getTrangThai())) {
             throw new IllegalArgumentException("Lịch khám không hợp lệ, không thuộc bác sĩ hoặc đã hoàn tất.");
         }
-        
+
         LichHen appointment = appointmentOpt.get();
-        
+
         Optional<PhieuKham> existingPk = phieuKhamRepository.findByMaLichHen(appointment.getMaLichHen());
         if (existingPk.isEmpty()) {
             throw new IllegalArgumentException("Không tìm thấy Phiếu khám. Vui lòng bấm Bắt đầu khám trước.");
@@ -117,7 +119,8 @@ public class PhieuKhamService {
         if (payload.get("nhietDo") != null) pk.setNhietDo(new BigDecimal(payload.get("nhietDo").toString()));
         if (payload.get("huyetAp") != null) pk.setHuyetAp((String) payload.get("huyetAp"));
         if (payload.get("nhipTho") != null) pk.setNhipTho(Integer.parseInt(payload.get("nhipTho").toString()));
-                // XỬ LÝ HẸN TÁI KHÁM:
+
+        // XỬ LÝ HẸN TÁI KHÁM:
         String rawNgayHen = (String) payload.get("ngayHenTaiKham");
         String rawGioHen = (String) payload.get("gioHenTaiKham");
 
@@ -195,7 +198,6 @@ public class PhieuKhamService {
                 Optional<Thuoc> drugOpt = thuocRepository.findById(maThuoc);
                 if (drugOpt.isPresent()) {
                     Thuoc drug = drugOpt.get();
-                    
 
                     ChiTietHoaDon cthdMed = new ChiTietHoaDon();
                     cthdMed.setMaChiTietHD("CTHD" + (System.currentTimeMillis() % 1000000) + "_" + seq);
@@ -205,11 +207,14 @@ public class PhieuKhamService {
                     cthdMed.setDonGia(drug.getDonGiaBan());
                     cthdMed.setSoLuong(qty);
                     billItems.add(cthdMed);
-
-                    totalSum = totalSum.add(drug.getDonGiaBan().multiply(BigDecimal.valueOf(qty)));
                 }
             }
         }
+
+        // Lưu đơn thuốc trước và tính tổng tiền thuốc bằng hàm SQL dbo.fn_TinhTongTienThuocTheoPhieuKham
+        donThuocRepository.saveAll(donThuocList);
+        BigDecimal tongTienThuoc = donThuocRepository.tinhTongTienThuocTheoPhieuKham(maPK);
+        totalSum = totalSum.add(tongTienThuoc);
 
         List<KetQuaCLS> clsOrders = new ArrayList<>();
         boolean isClsPaused = false;
@@ -277,13 +282,13 @@ public class PhieuKhamService {
             chiTietHoaDonRepository.save(item);
         }
 
-        donThuocRepository.saveAll(donThuocList);
         ketQuaCLSRepository.saveAll(clsOrders);
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);
         resp.put("maPhieuKham", maPK);
         resp.put("maHoaDon", maHD);
+        resp.put("tongTienThuoc", tongTienThuoc);
         resp.put("message", "Khám bệnh thành công! Đã tạo đơn thuốc và chuyển hóa đơn sang viện phí.");
         if (isClsPaused) {
             resp.put("warning", "Khoa Cận Lâm Sàng hiện đang tạm ngưng tiếp nhận. Các chỉ định xét nghiệm đã được lưu vào hàng đợi và sẽ được phòng Lab tiếp nhận ngay khi Khoa mở lại.");
@@ -307,7 +312,7 @@ public class PhieuKhamService {
                 || "DaKham".equalsIgnoreCase(appointmentOpt.get().getTrangThai())) {
             throw new IllegalArgumentException("Lịch khám không hợp lệ, không thuộc bác sĩ hoặc đã hoàn tất.");
         }
-        
+
         LichHen appointment = appointmentOpt.get();
         Optional<PhieuKham> existingPk = phieuKhamRepository.findByMaLichHen(appointment.getMaLichHen());
         if (existingPk.isEmpty()) {
@@ -319,7 +324,7 @@ public class PhieuKhamService {
         pk.setNgayKham(LocalDateTime.now());
         pk.setTrieuChung((String) payload.get("trieuChung"));
         pk.setChanDoan((String) payload.getOrDefault("chanDoan", "Chờ kết quả xét nghiệm"));
-        
+
         if (payload.get("mach") != null) pk.setMach(Integer.parseInt(payload.get("mach").toString()));
         if (payload.get("nhietDo") != null) pk.setNhietDo(new BigDecimal(payload.get("nhietDo").toString()));
         if (payload.get("huyetAp") != null) pk.setHuyetAp((String) payload.get("huyetAp"));
@@ -334,7 +339,7 @@ public class PhieuKhamService {
             });
         }
 
-                boolean isClsPaused = false;
+        boolean isClsPaused = false;
         List<KetQuaCLS> clsOrders = new ArrayList<>();
         List<?> clsList = (List<?>) payload.get("clsList");
         if (clsList != null && !clsList.isEmpty()) {
@@ -375,7 +380,7 @@ public class PhieuKhamService {
             ketQuaCLSRepository.saveAll(clsOrders);
         }
 
-                Map<String, Object> resp = new HashMap<>();
+        Map<String, Object> resp = new HashMap<>();
         resp.put("success", true);
         resp.put("maPhieuKham", maPK);
         resp.put("message", "Chỉ định cận lâm sàng thành công. Bệnh nhân chuyển sang trạng thái Chờ kết quả.");
@@ -385,5 +390,3 @@ public class PhieuKhamService {
         return resp;
     }
 }
-
-
