@@ -3,11 +3,10 @@
    Includes:
      1. 01_Tables_Constraints.sql (24 Tables, PK, UQ, Index, FK, Check)
      2. 02_Views.sql              (22 Views)
-     3. 03_Functions_Triggers.sql (1 Function, 2 Triggers)
+     3. 03_Functions_Triggers.sql (2 Functions, 3 Triggers)
      4. 04_StoredProcedures.sql   (15 Stored Procedures)
      5. 05_Data.sql               (Database Data)
    ====================================================================== */
-
 /* ======================================================================
    01_Tables_Constraints.sql
    Database [QuanLyBenhVien] - Tables, Primary Keys, Indexes & Constraints
@@ -557,6 +556,7 @@ ALTER TABLE [dbo].[YeuCauChuyenKhoa] WITH CHECK ADD CONSTRAINT [CK__YeuCauChu__L
 GO
 
 
+
 /* ======================================================================
    02_Views.sql
    Database [QuanLyBenhVien] - Views (22 Views)
@@ -752,19 +752,11 @@ GO
 
 
 
-/* ======================================================================
-   03_Functions_Triggers.sql
-   Database [QuanLyBenhVien] - Functions & Triggers
-   ====================================================================== */
-USE [QuanLyBenhVien];
+USE QuanLyBenhVien;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
 -- =========================================================================
--- HÀM TÍNH TOÁN HÀNG ĐỢI VÀ THỜI GIAN CHỜ DỰ KIẾN (Bao gồm giới hạn khám lố)
+-- 1. HÀM TÍNH HÀNG ĐỢI VÀ THỜI GIAN CHỜ (Dùng vòng lặp WHILE thay cho Cursor)
 -- =========================================================================
 CREATE OR ALTER FUNCTION fn_TinhHangDoiKham
 (
@@ -779,100 +771,114 @@ RETURNS @ResultTable TABLE
 )
 AS
 BEGIN
-    DECLARE @CurrentTime DATETIME = GETDATE();
-    DECLARE @RunningEndTime DATETIME = @CurrentTime;
-    
-    -- 1. Xử lý ca đang khám ('DangKham') để tìm mốc xuất phát của hàng đợi
-    DECLARE @DangKham_MaLichHen VARCHAR(15);
-    DECLARE @DangKham_BatDau DATETIME;
-    DECLARE @DangKham_ThoiGianDuKien INT;
-    DECLARE @DangKham_Scheduled DATETIME;
+    DECLARE @ThoiGianHienTai DATETIME = GETDATE();
+    DECLARE @MocKetThuc DATETIME = @ThoiGianHienTai;
+
+    -- BƯỚC 1: Xử lý ca đang khám (nếu có) để lấy giờ dự kiến xong
+    DECLARE @BatDauKham DATETIME, @SoPhutKham INT;
     
     SELECT TOP 1 
-        @DangKham_MaLichHen = lh.MaLichHen,
-        @DangKham_BatDau = pk.NgayKham,
-        @DangKham_ThoiGianDuKien = lh.ThoiGianKhamDuKien,
-        @DangKham_Scheduled = CAST(lh.NgayKham AS DATETIME) + CAST(lh.GioKham AS DATETIME)
+        @BatDauKham = pk.NgayKham,
+        @SoPhutKham = lh.ThoiGianKhamDuKien
     FROM dbo.LichHen lh
     JOIN dbo.PhieuKham pk ON lh.MaLichHen = pk.MaLichHen
     WHERE lh.TrangThai = 'DangKham' 
       AND lh.NgayKham = @NgayKham
-      AND lh.MaBacSi = @MaBacSi
-    ORDER BY lh.GioKham;
-    
-    IF @DangKham_MaLichHen IS NOT NULL
+      AND lh.MaBacSi = @MaBacSi;
+
+    -- Nếu có người đang khám, cộng thêm thời gian khám vào mốc bắt đầu
+    IF @BatDauKham IS NOT NULL
     BEGIN
-        -- Tính mốc thời gian kết thúc lý tưởng của ca đang khám
-        DECLARE @CalculatedEnd DATETIME = DATEADD(MINUTE, @DangKham_ThoiGianDuKien, @DangKham_BatDau);
+        SET @MocKetThuc = DATEADD(MINUTE, @SoPhutKham, @BatDauKham);
         
-        -- Tính mốc TỐI ĐA được phép kết thúc (Giờ hẹn + Thời lượng + 10 phút lố)
-        DECLARE @MaxAllowedEnd DATETIME = DATEADD(MINUTE, @DangKham_ThoiGianDuKien + 10, @DangKham_Scheduled);
-        
-        -- Nếu bác sĩ khám lố quá mức trần, ép thời gian tính toán về mức trần
-        -- (Để đảm bảo thuật toán không cộng dồn thời gian trễ vô tận cho người sau)
-        IF @CalculatedEnd > @MaxAllowedEnd
-            SET @CalculatedEnd = @MaxAllowedEnd;
-            
-        -- Nếu thời gian kết thúc dự kiến đã nằm trong quá khứ (tức là ca này đáng ra phải xong rồi)
-        -- Thì mốc bắt đầu của người tiếp theo sớm nhất là "Bây giờ"
-        IF @CalculatedEnd < @CurrentTime
-            SET @CalculatedEnd = @CurrentTime; 
-            
-        SET @RunningEndTime = @CalculatedEnd;
+        -- Nếu giờ dự kiến xong nằm ở quá khứ thì lấy luôn giờ hiện tại
+        IF @MocKetThuc < @ThoiGianHienTai
+            SET @MocKetThuc = @ThoiGianHienTai;
     END
 
-    -- 2. Dùng con trỏ (Cursor) duyệt qua danh sách bệnh nhân đang đợi ('DaDatLich')
-    DECLARE cur CURSOR LOCAL FAST_FORWARD FOR
-        SELECT MaLichHen, 
-               CAST(NgayKham AS DATETIME) + CAST(GioKham AS DATETIME) AS GioHenScheduled, 
-               ThoiGianKhamDuKien
-        FROM dbo.LichHen
-        WHERE TrangThai = 'DangChoKham'
-          AND NgayKham = @NgayKham
-          AND MaBacSi = @MaBacSi
-        ORDER BY GioKham;
-        
-    OPEN cur;
-    DECLARE @Id VARCHAR(15), @Sched DATETIME, @Dur INT;
-    
-    FETCH NEXT FROM cur INTO @Id, @Sched, @Dur;
-    WHILE @@FETCH_STATUS = 0
+    -- BƯỚC 2: Đưa các ca đang chờ vào bảng tạm có đánh số thứ tự 1, 2, 3...
+    DECLARE @DanhSachCho TABLE 
+    (
+        STT INT IDENTITY(1,1),
+        MaLichHen VARCHAR(15),
+        GioHen DATETIME,
+        ThoiGianKhamDuKien INT
+    );
+
+    INSERT INTO @DanhSachCho (MaLichHen, GioHen, ThoiGianKhamDuKien)
+    SELECT 
+        MaLichHen,
+        CAST(NgayKham AS DATETIME) + CAST(GioKham AS DATETIME),
+        ThoiGianKhamDuKien
+    FROM dbo.LichHen
+    WHERE TrangThai = 'DangChoKham'
+      AND NgayKham = @NgayKham
+      AND MaBacSi = @MaBacSi
+    ORDER BY GioKham;
+
+    -- BƯỚC 3: Dùng vòng lặp WHILE duyệt từng người theo STT
+    DECLARE @i INT = 1;
+    DECLARE @TongSoCa INT = (SELECT COUNT(*) FROM @DanhSachCho);
+
+    WHILE @i <= @TongSoCa
     BEGIN
-        -- Thời gian bắt đầu dự kiến của người này
-        DECLARE @ExpectedStart DATETIME = @RunningEndTime;
+        DECLARE @MaLH VARCHAR(15), @GioHen DATETIME, @PhutKham INT;
         
-        -- QUY TẮC QUAN TRỌNG: Không được gọi bệnh nhân vào khám sớm hơn giờ hẹn gốc
-        IF @ExpectedStart < @Sched
-            SET @ExpectedStart = @Sched;
-            
-        -- Thực tế: Không thể báo thời gian bắt đầu nằm ở quá khứ
-        IF @ExpectedStart < @CurrentTime
-            SET @ExpectedStart = @CurrentTime;
-            
-        -- Tính số phút chờ đợi
-        DECLARE @WaitMins INT = DATEDIFF(MINUTE, @CurrentTime, @ExpectedStart);
-        
-        -- Lưu kết quả
-        INSERT INTO @ResultTable(MaLichHen, ThoiGianDuKienBatDau, PhutChoDoi)
-        VALUES (@Id, @ExpectedStart, @WaitMins);
-        
-        -- Cập nhật RunningEndTime (cộng thêm thời lượng khám của người này) để tính cho người đứng sau
-        SET @RunningEndTime = DATEADD(MINUTE, @Dur, @ExpectedStart);
-        
-        FETCH NEXT FROM cur INTO @Id, @Sched, @Dur;
+        SELECT @MaLH = MaLichHen, @GioHen = GioHen, @PhutKham = ThoiGianKhamDuKien
+        FROM @DanhSachCho
+        WHERE STT = @i;
+
+        -- Thời gian bắt đầu là mốc xong của người trước
+        DECLARE @GioBatDau DATETIME = @MocKetThuc;
+
+        -- Không khám sớm hơn giờ bệnh nhân đã hẹn
+        IF @GioBatDau < @GioHen
+            SET @GioBatDau = @GioHen;
+
+        -- Không lấy mốc thời gian quá khứ
+        IF @GioBatDau < @ThoiGianHienTai
+            SET @GioBatDau = @ThoiGianHienTai;
+
+        -- Tính số phút phải chờ và thêm vào bảng kết quả
+        INSERT INTO @ResultTable (MaLichHen, ThoiGianDuKienBatDau, PhutChoDoi)
+        VALUES (@MaLH, @GioBatDau, DATEDIFF(MINUTE, @ThoiGianHienTai, @GioBatDau));
+
+        -- Mốc kết thúc ca này làm mốc bắt đầu cho ca kế tiếp
+        SET @MocKetThuc = DATEADD(MINUTE, @PhutKham, @GioBatDau);
+
+        SET @i = @i + 1;
     END
-    
-    CLOSE cur;
-    DEALLOCATE cur;
-    
+
     RETURN;
 END;
 GO
 
-SET ANSI_NULLS ON;
+-- =========================================================================
+-- 2. HÀM TÍNH TỔNG TIỀN THUỐC THEO PHIẾU KHÁM
+-- =========================================================================
+
+CREATE OR ALTER FUNCTION dbo.fn_TinhTongTienThuocTheoPhieuKham
+(
+    @MaPhieuKham VARCHAR(15)
+)
+RETURNS DECIMAL(12, 0)
+AS
+BEGIN
+    DECLARE @TongTienThuoc DECIMAL(12, 0) = 0;
+
+    SELECT @TongTienThuoc = ISNULL(SUM(CAST(dt.SoLuong AS DECIMAL(12, 0)) * t.DonGiaBan), 0)
+    FROM dbo.DonThuoc dt
+    JOIN dbo.Thuoc t ON dt.MaThuoc = t.MaThuoc
+    WHERE dt.MaPhieuKham = @MaPhieuKham;
+
+    RETURN @TongTienThuoc;
+END;
 GO
-SET QUOTED_IDENTIFIER ON;
-GO
+
+
+-- =========================================================================
+-- 3. TRIGGER CẬP NHẬT TRẠNG THÁI GIƯỜNG
+-- =========================================================================
 CREATE OR ALTER TRIGGER TRG_CapNhatTrangThaiGiuong
 ON NoiTru
 AFTER INSERT, UPDATE
@@ -880,7 +886,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Kiểm tra nếu giường đã có người khác đang nằm
+    -- 1. Kiểm tra trùng giường: Giường này có ai khác đang nằm không?
     IF EXISTS (
         SELECT 1 
         FROM inserted i
@@ -890,68 +896,99 @@ BEGIN
           AND i.MaNoiTru <> nt.MaNoiTru
     )
     BEGIN
-        RAISERROR (N'Lỗi: Giường này hiện đang có bệnh nhân khác sử dụng!', 16, 1);
+        RAISERROR (N'Giường này đã có người nằm!', 16, 1);
         ROLLBACK TRANSACTION;
         RETURN;
     END
 
-    -- Cập nhật giường sang 'DangSuDung' khi nhập viện
-    UPDATE g
-    SET g.TrangThai = 'DangSuDung'
-    FROM GiuongBenh g
-    JOIN inserted i ON g.MaGiuong = i.MaGiuong
-    WHERE i.TrangThai = 'DangNam';
+    -- 2. Cập nhật 'DangSuDung' cho giường vừa có người vào
+    UPDATE GiuongBenh
+    SET TrangThai = 'DangSuDung'
+    WHERE MaGiuong IN (SELECT MaGiuong FROM inserted WHERE TrangThai = 'DangNam');
 
-    -- Trả giường về 'Trong' khi xuất viện hoặc chuyển khoa
-    UPDATE g
-    SET g.TrangThai = 'Trong'
-    FROM GiuongBenh g
-    JOIN inserted i ON g.MaGiuong = i.MaGiuong
-    WHERE i.TrangThai IN ('DaXuatVien', 'ChuyenKhoa');
+    -- 3. Trả về 'Trong' cho giường khi bệnh nhân xuất viện hoặc chuyển khoa
+    UPDATE GiuongBenh
+    SET TrangThai = 'Trong'
+    WHERE MaGiuong IN (SELECT MaGiuong FROM inserted WHERE TrangThai IN ('DaXuatVien', 'ChuyenKhoa'));
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
-CREATE OR ALTER TRIGGER trg_KetQuaCLS_Notification ON dbo.KetQuaCLS
+-- =========================================================================
+-- 4. TRIGGER TẠO THÔNG BÁO KHI CÓ KẾT QUẢ CẬN LÂM SÀNG
+-- =========================================================================
+CREATE OR ALTER TRIGGER trg_KetQuaCLS_Notification 
+ON dbo.KetQuaCLS
 AFTER UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
-    IF UPDATE(KetLuan)
+
+    -- Chỉ tạo thông báo khi cột KetLuan được cập nhật giá trị mới
+    INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao)
+    SELECT 
+        tk.MaTaiKhoan,
+        N'Kết quả xét nghiệm mới',
+        N'Đã có kết quả dịch vụ: ' + d.TenDichVu,
+        'KET_QUA_XN'
+    FROM inserted i
+    JOIN deleted d_old ON i.MaKetQua = d_old.MaKetQua
+    JOIN dbo.PhieuKham pk ON i.MaPhieuKham = pk.MaPhieuKham
+    JOIN dbo.BenhNhan bn ON pk.MaBenhNhan = bn.MaBenhNhan
+    JOIN dbo.TaiKhoan tk ON bn.MaTaiKhoan = tk.MaTaiKhoan
+    JOIN dbo.DichVuCLS d ON i.MaDichVu = d.MaDichVu
+    WHERE i.KetLuan IS NOT NULL 
+      AND (d_old.KetLuan IS NULL OR d_old.KetLuan = '');
+END;
+GO
+
+-------------------------------------------------------------------------
+-- 5. TRIGGER KIỂM TRA THANH TOÁN TRƯỚC KHI PHÁT THUỐC
+-------------------------------------------------------------------------
+
+CREATE OR ALTER TRIGGER dbo.trg_KiemTraThanhToanTruocKhiPhatThuoc
+ON dbo.DonThuoc
+AFTER UPDATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Kiểm tra khi dược sĩ cập nhật trạng thái đơn thuốc sang 'COMPLETED'
+    IF UPDATE(TrangThai)
     BEGIN
-        INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao)
-        SELECT 
-            tk.MaTaiKhoan,
-            N'Kết quả xét nghiệm/CĐHA mới',
-            N'Kết quả dịch vụ "' + d.TenDichVu + N'" của bạn đã có. Vui lòng kiểm tra mục Hồ sơ bệnh án.',
-            'KET_QUA_XN'
-        FROM inserted i
-        JOIN deleted d_old ON i.MaKetQua = d_old.MaKetQua
-        JOIN dbo.PhieuKham pk ON i.MaPhieuKham = pk.MaPhieuKham
-        JOIN dbo.BenhNhan bn ON pk.MaBenhNhan = bn.MaBenhNhan
-        JOIN dbo.TaiKhoan tk ON bn.MaTaiKhoan = tk.MaTaiKhoan
-        JOIN dbo.DichVuCLS d ON i.MaDichVu = d.MaDichVu
-        WHERE i.KetLuan IS NOT NULL AND (d_old.KetLuan IS NULL OR d_old.KetLuan = '');
+        IF EXISTS (
+            SELECT 1
+            FROM inserted i
+            JOIN deleted d ON i.MaDonThuoc = d.MaDonThuoc
+            WHERE i.TrangThai = 'COMPLETED' 
+              AND ISNULL(d.TrangThai, '') <> 'COMPLETED'
+              AND NOT EXISTS (
+                  -- Kiểm tra xem phiếu khám này đã có hóa đơn thanh toán thành công chưa
+                  SELECT 1 
+                  FROM dbo.HoaDon hd
+                  WHERE hd.MaPhieuKham = i.MaPhieuKham
+                    AND hd.TrangThaiTT = 'Da Thanh Toan'
+              )
+        )
+        BEGIN
+            RAISERROR (N'Lỗi: Bệnh nhân chưa hoàn tất thanh toán hóa đơn tại quầy Thu ngân. Không thể phát thuốc!', 16, 1);
+            ROLLBACK TRANSACTION;
+            RETURN;
+        END
     END
 END;
 GO
 
 
 
-/* ======================================================================
-   04_StoredProcedures.sql
-   Database [QuanLyBenhVien] - Stored Procedures (15 Procedures)
-   ====================================================================== */
-USE [QuanLyBenhVien];
+USE QuanLyBenhVien;
 GO
 
 SET ANSI_NULLS ON;
 GO
 SET QUOTED_IDENTIFIER ON;
 GO
+
+-- 1. Thêm mới hoặc cập nhật Giường bệnh
 CREATE OR ALTER PROCEDURE dbo.sp_GiuongBenh_Save
     @MaGiuong VARCHAR(15) = NULL,
     @MaPhong VARCHAR(15) = NULL,
@@ -961,13 +998,13 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- 1. Nếu chưa có mã giường (tạo mới) -> Tự động sinh mã: [Mã Phòng]-[Số Giường]
+    -- Tự sinh mã giường nếu chưa có
     IF @MaGiuong IS NULL OR LTRIM(RTRIM(@MaGiuong)) = ''
     BEGIN
         SET @MaGiuong = @MaPhong + '-' + REPLACE(@SoGiuong, ' ', '');
     END
 
-    -- 2. Kiểm tra nếu ĐÃ TỒN TẠI mã giường -> Chạy UPDATE (Sửa)
+    -- Kiểm tra tồn tại: có thì UPDATE, chưa có thì INSERT
     IF EXISTS (SELECT 1 FROM GiuongBenh WHERE MaGiuong = @MaGiuong)
     BEGIN
         UPDATE GiuongBenh
@@ -975,7 +1012,6 @@ BEGIN
             DonGiaNgay = @DonGiaNgay
         WHERE MaGiuong = @MaGiuong;
     END
-    -- 3. Nếu CHƯA CÓ mã giường -> Chạy INSERT (Tạo mới)
     ELSE
     BEGIN
         INSERT INTO GiuongBenh (MaGiuong, SoGiuong, MaPhong, DonGiaNgay, TrangThai)
@@ -984,29 +1020,24 @@ BEGIN
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 2. Đảo trạng thái Giường bệnh (Bảo trì <-> Trống)
 CREATE OR ALTER PROCEDURE dbo.sp_GiuongBenh_ToggleStatus
     @MaGiuong VARCHAR(15)
 AS
 BEGIN
     SET NOCOUNT ON;
+
     UPDATE GiuongBenh
     SET TrangThai = CASE 
         WHEN TrangThai = 'BaoTri' THEN 'Trong'
-        WHEN TrangThai = 'Trong' THEN 'BaoTri'
+        WHEN TrangThai = 'Trong'  THEN 'BaoTri'
         ELSE TrangThai 
     END
     WHERE MaGiuong = @MaGiuong;
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 3. Thêm mới hoặc cập nhật Khoa
 CREATE OR ALTER PROCEDURE dbo.sp_Khoa_Save
     @MaKhoa VARCHAR(10),
     @TenKhoa NVARCHAR(100),
@@ -1014,10 +1045,12 @@ CREATE OR ALTER PROCEDURE dbo.sp_Khoa_Save
 AS
 BEGIN
     SET NOCOUNT ON;
+
     IF EXISTS (SELECT 1 FROM Khoa WHERE MaKhoa = @MaKhoa)
     BEGIN
         UPDATE Khoa 
-        SET TenKhoa = @TenKhoa, MoTa = @MoTa
+        SET TenKhoa = @TenKhoa, 
+            MoTa = @MoTa
         WHERE MaKhoa = @MaKhoa;
     END
     ELSE
@@ -1028,72 +1061,62 @@ BEGIN
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 4. Đảo trạng thái hoạt động của Khoa
 CREATE OR ALTER PROCEDURE dbo.sp_Khoa_ToggleStatus  
     @MaKhoa VARCHAR(10)  
 AS  
 BEGIN  
     SET NOCOUNT ON;  
+
     DECLARE @CurrentStatus BIT;  
     SELECT @CurrentStatus = ISNULL(TrangThai, 1) FROM Khoa WHERE MaKhoa = @MaKhoa;  
   
     IF @CurrentStatus = 1  
     BEGIN  
-        -- Đổi Khoa sang Tạm ngưng (0)  
+        -- 1. Đổi Khoa sang tạm ngưng (0) và khóa Phòng thuộc Khoa
         UPDATE Khoa SET TrangThai = 0 WHERE MaKhoa = @MaKhoa;  
-  
-        -- Khóa tất cả Phòng thuộc khoa  
         UPDATE Phong SET TrangThai = 0 WHERE MaKhoa = @MaKhoa;  
   
-        -- Khóa tất cả Giường trống thuộc các phòng của khoa này (JOIN qua Phong)  
+        -- 2. Chuyển các giường Trống sang Bảo trì
         UPDATE g  
         SET g.TrangThai = 'BaoTri'  
         FROM GiuongBenh g  
         INNER JOIN Phong p ON g.MaPhong = p.MaPhong  
         WHERE p.MaKhoa = @MaKhoa AND g.TrangThai = 'Trong';  
   
-        -- Hủy các lịch hẹn tương lai chưa khám  
-        DECLARE @AffectedAppointments TABLE (MaLichHen VARCHAR(15), MaTaiKhoan BIGINT, NgayKham DATE);  
-          
-        INSERT INTO @AffectedAppointments (MaLichHen, MaTaiKhoan, NgayKham)  
-        SELECT lh.MaLichHen, bn.MaTaiKhoan, lh.NgayKham  
-        FROM LichHen lh  
-        inner JOIN BenhNhan bn ON lh.MaBenhNhan = bn.MaBenhNhan  
-        WHERE lh.MaKhoa = @MaKhoa   
-          AND lh.NgayKham >= CAST(GETDATE() AS DATE)  
-          AND lh.TrangThai = 'DaDatLich';  
-  
-        UPDATE LichHen   
-        SET TrangThai = 'DaHuy'   
-        WHERE MaLichHen IN (SELECT MaLichHen FROM @AffectedAppointments);  
-  
-        -- Bắn thông báo cho bệnh nhân  
+        -- 3. Tạo thông báo hủy lịch cho bệnh nhân
         DECLARE @TenKhoa NVARCHAR(100);  
         SELECT @TenKhoa = TenKhoa FROM Khoa WHERE MaKhoa = @MaKhoa;  
-  
+
         INSERT INTO ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao, DaDoc, NgayTao)  
         SELECT   
-            aa.MaTaiKhoan,  
+            bn.MaTaiKhoan,  
             N'Thông báo hủy lịch hẹn do Khoa tạm ngưng tiếp nhận',  
-            N'Lịch hẹn ngày ' + CONVERT(VARCHAR, aa.NgayKham, 103) + N' tại ' + @TenKhoa + N' đã được tự động hủy do Khoa tạm ngưng hoạt động. Quý khách vui lòng đặt lại lịch tại khoa khác hoặc liên hệ bộ phận Tiếp đón.',  
-            N'LICH_HEN',  
+            N'Lịch hẹn ngày ' + CONVERT(VARCHAR, lh.NgayKham, 103) + N' tại ' + @TenKhoa + N' đã được tự động hủy do Khoa tạm ngưng hoạt động. Quý khách vui lòng đặt lại lịch tại khoa khác hoặc liên hệ bộ phận Tiếp đón.',  
+            'LICH_HEN',  
             0,  
             GETDATE()  
-        FROM @AffectedAppointments aa  
-        WHERE aa.MaTaiKhoan IS NOT NULL;  
+        FROM LichHen lh  
+        INNER JOIN BenhNhan bn ON lh.MaBenhNhan = bn.MaBenhNhan  
+        WHERE lh.MaKhoa = @MaKhoa   
+          AND lh.NgayKham >= CAST(GETDATE() AS DATE)  
+          AND lh.TrangThai = 'DaDatLich'
+          AND bn.MaTaiKhoan IS NOT NULL;  
+
+        -- 4. Hủy các lịch hẹn tương lai chưa khám
+        UPDATE LichHen   
+        SET TrangThai = 'DaHuy'   
+        WHERE MaKhoa = @MaKhoa   
+          AND NgayKham >= CAST(GETDATE() AS DATE)  
+          AND TrangThai = 'DaDatLich';  
     END  
     ELSE  
     BEGIN  
-        -- Mở lại hoạt động Khoa (1)  
+        -- Mở lại hoạt động Khoa và Phòng
         UPDATE Khoa SET TrangThai = 1 WHERE MaKhoa = @MaKhoa;  
-  
-        -- Mở lại tất cả Phòng thuộc khoa  
         UPDATE Phong SET TrangThai = 1 WHERE MaKhoa = @MaKhoa;  
   
-        -- Mở lại các giường 'BaoTri' về lại 'Trong' (JOIN qua Phong)  
+        -- Mở lại các giường Bảo trì về trạng thái Trống
         UPDATE g  
         SET g.TrangThai = 'Trong'  
         FROM GiuongBenh g  
@@ -1103,10 +1126,7 @@ BEGIN
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 5. Thêm mới hoặc cập nhật Phòng
 CREATE OR ALTER PROCEDURE dbo.sp_Phong_Save
     @MaPhong VARCHAR(15),
     @TenPhong NVARCHAR(100),
@@ -1115,10 +1135,13 @@ CREATE OR ALTER PROCEDURE dbo.sp_Phong_Save
 AS
 BEGIN
     SET NOCOUNT ON;
+
     IF EXISTS (SELECT 1 FROM Phong WHERE MaPhong = @MaPhong)
     BEGIN
         UPDATE Phong 
-        SET TenPhong = @TenPhong, LoaiPhong = @LoaiPhong, MaKhoa = @MaKhoa
+        SET TenPhong = @TenPhong, 
+            LoaiPhong = @LoaiPhong, 
+            MaKhoa = @MaKhoa
         WHERE MaPhong = @MaPhong;
     END
     ELSE
@@ -1129,50 +1152,37 @@ BEGIN
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 6. Đảo trạng thái Phòng
 CREATE OR ALTER PROCEDURE dbo.sp_Phong_ToggleStatus
     @MaPhong VARCHAR(15)
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @NewStatus BIT;
-    SELECT @NewStatus = CASE WHEN ISNULL(TrangThai, 1) = 1 THEN 0 ELSE 1 END 
-    FROM Phong 
-    WHERE MaPhong = @MaPhong;
 
-    -- Cập nhật trạng thái Phòng
-    UPDATE Phong 
-    SET TrangThai = @NewStatus
-    WHERE MaPhong = @MaPhong;
+    DECLARE @CurrentStatus BIT;
+    SELECT @CurrentStatus = ISNULL(TrangThai, 1) FROM Phong WHERE MaPhong = @MaPhong;
 
-    -- Nếu Phòng Tạm ngưng (0): Chuyển các giường Trống trong phòng sang 'BaoTri'
-    IF @NewStatus = 0
+    IF @CurrentStatus = 1
     BEGIN
-        UPDATE GiuongBenh
-        SET TrangThai = 'BaoTri'
-        WHERE MaPhong = @MaPhong AND TrangThai = 'Trong';
+        -- Đang mở -> Chuyển sang tắt (0) và chuyển các giường Trống sang Bảo trì
+        UPDATE Phong SET TrangThai = 0 WHERE MaPhong = @MaPhong;
+        UPDATE GiuongBenh SET TrangThai = 'BaoTri' WHERE MaPhong = @MaPhong AND TrangThai = 'Trong';
     END
-    -- Nếu Phòng Mở lại (1): Trả các giường 'BaoTri' về lại 'Trong'
     ELSE
     BEGIN
-        UPDATE GiuongBenh
-        SET TrangThai = 'Trong'
-        WHERE MaPhong = @MaPhong AND TrangThai = 'BaoTri';
+        -- Đang tắt -> Mở lại (1) và chuyển các giường Bảo trì về Trống
+        UPDATE Phong SET TrangThai = 1 WHERE MaPhong = @MaPhong;
+        UPDATE GiuongBenh SET TrangThai = 'Trong' WHERE MaPhong = @MaPhong AND TrangThai = 'BaoTri';
     END
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 7. Tự động tạo thông báo nhắc lịch khám ngày mai
 CREATE OR ALTER PROCEDURE dbo.sp_TaoThongBaoNhacLich
 AS
 BEGIN
     SET NOCOUNT ON;
+
     INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao)
     SELECT 
         tk.MaTaiKhoan,
@@ -1193,11 +1203,7 @@ BEGIN
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
--- 
+-- 8. Gửi thông báo hàng loạt (Broadcast)
 CREATE OR ALTER PROCEDURE dbo.sp_ThongBao_Broadcast
     @TieuDe NVARCHAR(200),
     @NoiDung NVARCHAR(1000),
@@ -1206,37 +1212,25 @@ CREATE OR ALTER PROCEDURE dbo.sp_ThongBao_Broadcast
 AS
 BEGIN
     SET NOCOUNT ON;
-    -- Lấy danh sách tài khoản từ VIEW dbo.vw_TaiKhoan theo nhóm chỉ định
-    IF @TargetRole IS NULL OR @TargetRole = '' OR UPPER(@TargetRole) = 'ALL'
-    BEGIN
-        INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao, DaDoc, NgayTao)
-        SELECT MaTaiKhoan, @TieuDe, @NoiDung, @LoaiThongBao, 0, GETDATE()
-        FROM dbo.vw_TaiKhoan
-        WHERE TrangThai = 1;
-    END
-    ELSE IF UPPER(@TargetRole) = 'STAFF'
-    BEGIN
-        INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao, DaDoc, NgayTao)
-        SELECT MaTaiKhoan, @TieuDe, @NoiDung, @LoaiThongBao, 0, GETDATE()
-        FROM dbo.vw_TaiKhoan
-        WHERE TrangThai = 1 AND VaiTro <> 'BenhNhan';
-    END
-    ELSE
-    BEGIN
-        INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao, DaDoc, NgayTao)
-        SELECT MaTaiKhoan, @TieuDe, @NoiDung, @LoaiThongBao, 0, GETDATE()
-        FROM dbo.vw_TaiKhoan
-        WHERE TrangThai = 1 AND VaiTro = @TargetRole;
-    END
-    -- Trả về số lượng người nhận thực tế
+
+    IF @TargetRole IS NULL OR @TargetRole = ''
+        SET @TargetRole = 'ALL';
+
+    INSERT INTO dbo.ThongBao (MaTaiKhoan, TieuDe, NoiDung, LoaiThongBao, DaDoc, NgayTao)
+    SELECT MaTaiKhoan, @TieuDe, @NoiDung, @LoaiThongBao, 0, GETDATE()
+    FROM dbo.vw_TaiKhoan
+    WHERE TrangThai = 1
+      AND (
+          @TargetRole = 'ALL'
+          OR (@TargetRole = 'STAFF' AND VaiTro <> 'BenhNhan')
+          OR (VaiTro = @TargetRole)
+      );
+
     SELECT @@ROWCOUNT AS SoNguoiNhan;
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 9. Tạo một thông báo cho tài khoản
 CREATE OR ALTER PROCEDURE dbo.sp_ThongBao_Create
     @MaTaiKhoan BIGINT,
     @TieuDe NVARCHAR(200),
@@ -1251,29 +1245,24 @@ BEGIN
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 10. Đánh dấu thông báo đã đọc
 CREATE OR ALTER PROCEDURE dbo.sp_ThongBao_MarkRead
     @MaThongBao INT,
     @MaTaiKhoan BIGINT
 AS
 BEGIN
     SET NOCOUNT ON;
+
     UPDATE dbo.ThongBao
     SET DaDoc = 1
     WHERE MaThongBao = @MaThongBao AND MaTaiKhoan = @MaTaiKhoan;
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 11. Tiếp nhận bệnh nhân vào khám
 CREATE OR ALTER PROCEDURE sp_TiepNhanBenhNhan
     @MaLichHen VARCHAR(15),
-    @MaPhieuKham VARCHAR(15), -- Frontend truyền xuống hoặc tự sinh
+    @MaPhieuKham VARCHAR(15),
     @MaBacSi VARCHAR(15),
     @MaKhoa VARCHAR(10)
 AS
@@ -1283,12 +1272,12 @@ BEGIN
     DECLARE @GioHen DATETIME;
     DECLARE @TrangThai VARCHAR(20);
     DECLARE @MaBenhNhan VARCHAR(15);
-    DECLARE @DelayMinutes INT;
 
     -- Lấy thông tin lịch hẹn
-    SELECT @GioHen = CAST(NgayKham AS DATETIME) + CAST(GioKham AS DATETIME),
-           @TrangThai = TrangThai,
-           @MaBenhNhan = MaBenhNhan
+    SELECT 
+        @GioHen = CAST(NgayKham AS DATETIME) + CAST(GioKham AS DATETIME),
+        @TrangThai = TrangThai,
+        @MaBenhNhan = MaBenhNhan
     FROM dbo.LichHen
     WHERE MaLichHen = @MaLichHen;
 
@@ -1298,29 +1287,15 @@ BEGIN
         RETURN;
     END
 
-    -- Kiểm tra xem bác sĩ này có đang khám dở ca nào chưa hoàn tất không
-    IF EXISTS (
-    SELECT 1 FROM dbo.LichHen 
-    WHERE MaBacSi = @MaBacSi AND TrangThai = 'DangKham'
-    )
+    -- Kiểm tra bác sĩ có ca nào đang khám dở không
+    IF EXISTS (SELECT 1 FROM dbo.LichHen WHERE MaBacSi = @MaBacSi AND TrangThai = 'DangKham')
     BEGIN
-    RAISERROR(N'Bác sĩ đang có một ca bệnh đang khám. Vui lòng bấm Hoàn tất khám ca hiện tại trước khi gọi bệnh nhân mới!', 16, 1);
-    RETURN;
-    END
-
-    -- Tính số phút trễ (khoảng cách từ lúc hẹn đến hiện tại)
-    SET @DelayMinutes = DATEDIFF(MINUTE, @GioHen, GETDATE());
-
-    -- Kiểm tra nếu bác sĩ gọi khám quá sớm (trước giờ hẹn)
-    /*IF @DelayMinutes < 0
-    BEGIN
-        RAISERROR(N'Chưa tới giờ hẹn. Không thể bắt đầu khám sớm hơn lịch trình được xếp!', 16, 1);
+        RAISERROR(N'Bác sĩ đang có một ca bệnh đang khám. Vui lòng hoàn tất trước khi gọi ca mới!', 16, 1);
         RETURN;
     END
-    */
 
-    -- Nếu đến trễ quá 10 phút, tự động hủy
-    IF @DelayMinutes > 10
+    -- Nếu trễ quá 10 phút thì hủy lịch
+    IF DATEDIFF(MINUTE, @GioHen, GETDATE()) > 10
     BEGIN
         UPDATE dbo.LichHen
         SET TrangThai = 'DaHuy'
@@ -1330,36 +1305,28 @@ BEGIN
         RETURN;
     END
 
-    -- Nếu hợp lệ (<= 10 phút), tạo phiếu khám và chuyển trạng thái
+    -- Tạo phiếu khám và cập nhật trạng thái
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        -- Cập nhật lịch hẹn
         UPDATE dbo.LichHen
         SET TrangThai = 'DangKham'
         WHERE MaLichHen = @MaLichHen;
 
-        -- Tạo phiếu khám (với NgayKham = GETDATE() làm thời điểm bắt đầu)
-        INSERT INTO dbo.PhieuKham
-            (MaPhieuKham, MaBenhNhan, MaBacSi, MaKhoa, MaLichHen, NgayKham)
-        VALUES
-            (@MaPhieuKham, @MaBenhNhan, @MaBacSi, @MaKhoa, @MaLichHen, GETDATE());
+        INSERT INTO dbo.PhieuKham (MaPhieuKham, MaBenhNhan, MaBacSi, MaKhoa, MaLichHen, NgayKham)
+        VALUES (@MaPhieuKham, @MaBenhNhan, @MaBacSi, @MaKhoa, @MaLichHen, GETDATE());
 
         COMMIT TRANSACTION;
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0
             ROLLBACK TRANSACTION;
-
         THROW;
     END CATCH
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 12. Xóa dữ liệu bảng tổng quát (Generic Delete)
 CREATE OR ALTER PROCEDURE dbo.usp_Entity_Delete
     @EntityName SYSNAME,
     @IdValue NVARCHAR(4000)
@@ -1367,34 +1334,19 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @TableName SYSNAME = CASE @EntityName
-        WHEN N'AuditLog' THEN N'AuditLog'
-        WHEN N'BenhNhan' THEN N'BenhNhan'
-        WHEN N'ChiTietHoaDon' THEN N'ChiTietHoaDon'
-        WHEN N'ChiTietKetQuaCLS' THEN N'ChiTietKetQuaCLS'
-        WHEN N'ChiTietNhapKho' THEN N'ChiTietNhapKho'
-        WHEN N'DichVuCLS' THEN N'DichVuCLS'
-        WHEN N'DonThuoc' THEN N'DonThuoc'
-        WHEN N'GiuongBenh' THEN N'GiuongBenh'
-        WHEN N'HoaDon' THEN N'HoaDon'
-        WHEN N'KetQuaCLS' THEN N'KetQuaCLS'
-        WHEN N'Khoa' THEN N'Khoa'
-        WHEN N'LichHen' THEN N'LichHen'
-        WHEN N'LichTruc' THEN N'LichTruc'
-        WHEN N'NhanVien' THEN N'NhanVien'
-        WHEN N'NoiTru' THEN N'NoiTru'
-        WHEN N'PhieuKham' THEN N'PhieuKham'
-        WHEN N'PhieuNhapKho' THEN N'PhieuNhapKho'
-        WHEN N'Thuoc' THEN N'Thuoc'
-        WHEN N'YeuCauChuyenKhoa' THEN N'YeuCauChuyenKhoa'
-        ELSE NULL
-    END;
-
-    IF @TableName IS NULL
+    -- Kiểm tra danh sách bảng cho phép
+    IF @EntityName NOT IN (
+        N'AuditLog', N'BenhNhan', N'ChiTietHoaDon', N'ChiTietKetQuaCLS', N'ChiTietNhapKho',
+        N'DichVuCLS', N'DonThuoc', N'GiuongBenh', N'HoaDon', N'KetQuaCLS', N'Khoa',
+        N'LichHen', N'LichTruc', N'NhanVien', N'NoiTru', N'PhieuKham', N'PhieuNhapKho',
+        N'Thuoc', N'YeuCauChuyenKhoa'
+    )
         THROW 50002, 'Entity is not allowed for generic persistence.', 1;
 
-    DECLARE @ObjectId INT = OBJECT_ID(N'dbo.' + QUOTENAME(@TableName), N'U');
+    -- Tìm cột khóa chính (PK)
+    DECLARE @ObjectId INT = OBJECT_ID(N'dbo.' + QUOTENAME(@EntityName), N'U');
     DECLARE @KeyColumn SYSNAME;
+
     SELECT @KeyColumn = c.name
     FROM sys.key_constraints kc
     JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
@@ -1404,16 +1356,14 @@ BEGIN
     IF @KeyColumn IS NULL
         THROW 50003, 'Entity table has no primary key.', 1;
 
-    DECLARE @DeleteSql NVARCHAR(MAX) = N'DELETE FROM dbo.' + QUOTENAME(@TableName)
+    -- Thực thi lệnh xóa
+    DECLARE @DeleteSql NVARCHAR(MAX) = N'DELETE FROM dbo.' + QUOTENAME(@EntityName)
         + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;';
     EXEC sys.sp_executesql @DeleteSql, N'@Value NVARCHAR(4000)', @Value = @IdValue;
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 13. Lưu dữ liệu bảng tổng quát từ JSON (Generic Save)
 CREATE OR ALTER PROCEDURE dbo.usp_Entity_Save
     @EntityName SYSNAME,
     @Payload NVARCHAR(MAX)
@@ -1424,34 +1374,17 @@ BEGIN
     IF ISJSON(@Payload) <> 1
         THROW 50001, 'Entity payload must be valid JSON.', 1;
 
-    DECLARE @TableName SYSNAME = CASE @EntityName
-        WHEN N'AuditLog' THEN N'AuditLog'
-        WHEN N'BenhNhan' THEN N'BenhNhan'
-        WHEN N'ChiTietHoaDon' THEN N'ChiTietHoaDon'
-        WHEN N'ChiTietKetQuaCLS' THEN N'ChiTietKetQuaCLS'
-        WHEN N'ChiTietNhapKho' THEN N'ChiTietNhapKho'
-        WHEN N'DichVuCLS' THEN N'DichVuCLS'
-        WHEN N'DonThuoc' THEN N'DonThuoc'
-        WHEN N'GiuongBenh' THEN N'GiuongBenh'
-        WHEN N'HoaDon' THEN N'HoaDon'
-        WHEN N'KetQuaCLS' THEN N'KetQuaCLS'
-        WHEN N'Khoa' THEN N'Khoa'
-        WHEN N'LichHen' THEN N'LichHen'
-        WHEN N'LichTruc' THEN N'LichTruc'
-        WHEN N'NhanVien' THEN N'NhanVien'
-        WHEN N'NoiTru' THEN N'NoiTru'
-        WHEN N'PhieuKham' THEN N'PhieuKham'
-        WHEN N'PhieuNhapKho' THEN N'PhieuNhapKho'
-        WHEN N'Thuoc' THEN N'Thuoc'
-        WHEN N'YeuCauChuyenKhoa' THEN N'YeuCauChuyenKhoa'
-        ELSE NULL
-    END;
-
-    IF @TableName IS NULL
+    IF @EntityName NOT IN (
+        N'AuditLog', N'BenhNhan', N'ChiTietHoaDon', N'ChiTietKetQuaCLS', N'ChiTietNhapKho',
+        N'DichVuCLS', N'DonThuoc', N'GiuongBenh', N'HoaDon', N'KetQuaCLS', N'Khoa',
+        N'LichHen', N'LichTruc', N'NhanVien', N'NoiTru', N'PhieuKham', N'PhieuNhapKho',
+        N'Thuoc', N'YeuCauChuyenKhoa'
+    )
         THROW 50002, 'Entity is not allowed for generic persistence.', 1;
 
-    DECLARE @ObjectId INT = OBJECT_ID(N'dbo.' + QUOTENAME(@TableName), N'U');
+    DECLARE @ObjectId INT = OBJECT_ID(N'dbo.' + QUOTENAME(@EntityName), N'U');
     DECLARE @KeyColumn SYSNAME;
+
     SELECT @KeyColumn = c.name
     FROM sys.key_constraints kc
     JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
@@ -1461,7 +1394,7 @@ BEGIN
     IF @KeyColumn IS NULL
         THROW 50003, 'Entity table has no primary key.', 1;
 
-    DECLARE @QualifiedTable NVARCHAR(300) = N'dbo.' + QUOTENAME(@TableName);
+    DECLARE @QualifiedTable NVARCHAR(300) = N'dbo.' + QUOTENAME(@EntityName);
     DECLARE @KeyValue NVARCHAR(4000) = JSON_VALUE(@Payload, N'$.' + QUOTENAME(@KeyColumn, '"'));
     DECLARE @InsertColumns NVARCHAR(MAX);
     DECLARE @InsertValues NVARCHAR(MAX);
@@ -1475,53 +1408,45 @@ BEGIN
       AND c.is_identity = 0
       AND c.is_computed = 0
       AND c.generated_always_type = 0
-    AND EXISTS (SELECT 1 FROM OPENJSON(@Payload) j
-            WHERE j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT);
+      AND EXISTS (SELECT 1 FROM OPENJSON(@Payload) j WHERE j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT);
 
     SELECT @UpdateSet = STRING_AGG(
-        CONVERT(NVARCHAR(MAX), QUOTENAME(c.name) + N' = (SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')'),
-        N',') WITHIN GROUP (ORDER BY c.column_id)
+        CONVERT(NVARCHAR(MAX), QUOTENAME(c.name) + N' = (SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')'), N',') WITHIN GROUP (ORDER BY c.column_id)
     FROM sys.columns c
     WHERE c.object_id = @ObjectId
       AND c.name <> @KeyColumn
       AND c.is_identity = 0
       AND c.is_computed = 0
       AND c.generated_always_type = 0
-    AND EXISTS (SELECT 1 FROM OPENJSON(@Payload) j
-            WHERE j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT);
+      AND EXISTS (SELECT 1 FROM OPENJSON(@Payload) j WHERE j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT);
 
+    -- Nếu có truyền KeyValue và bản ghi đã tồn tại thì UPDATE
     IF @KeyValue IS NOT NULL
     BEGIN
         DECLARE @Exists BIT = 0;
         DECLARE @ExistsSql NVARCHAR(MAX) = N'SELECT @Found = CASE WHEN EXISTS (SELECT 1 FROM ' + @QualifiedTable
             + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value) THEN 1 ELSE 0 END;';
-        EXEC sys.sp_executesql @ExistsSql,
-            N'@Value NVARCHAR(4000), @Found BIT OUTPUT', @Value = @KeyValue, @Found = @Exists OUTPUT;
+        EXEC sys.sp_executesql @ExistsSql, N'@Value NVARCHAR(4000), @Found BIT OUTPUT', @Value = @KeyValue, @Found = @Exists OUTPUT;
 
         IF @Exists = 1
         BEGIN
             IF @UpdateSet IS NULL RETURN;
-            DECLARE @UpdateSql NVARCHAR(MAX) = N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet
-                + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;';
-            EXEC sys.sp_executesql @UpdateSql,
-                N'@Payload NVARCHAR(MAX), @Value NVARCHAR(4000)', @Payload = @Payload, @Value = @KeyValue;
+            DECLARE @UpdateSql NVARCHAR(MAX) = N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;';
+            EXEC sys.sp_executesql @UpdateSql, N'@Payload NVARCHAR(MAX), @Value NVARCHAR(4000)', @Payload = @Payload, @Value = @KeyValue;
             RETURN;
         END
     END
 
+    -- Ngược lại thực hiện INSERT
     IF @InsertColumns IS NULL
         THROW 50004, 'No writable entity columns found in payload.', 1;
 
-    DECLARE @InsertSql NVARCHAR(MAX) = N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertColumns
-        + N') SELECT ' + @InsertValues + N';';
+    DECLARE @InsertSql NVARCHAR(MAX) = N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertColumns + N') SELECT ' + @InsertValues + N';';
     EXEC sys.sp_executesql @InsertSql, N'@Payload NVARCHAR(MAX)', @Payload = @Payload;
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 14. Thêm mới Tài khoản
 CREATE OR ALTER PROCEDURE dbo.usp_TaiKhoan_Insert
     @TenDangNhap VARCHAR(50),
     @MatKhauHash VARCHAR(255),
@@ -1542,10 +1467,7 @@ BEGIN
 END;
 GO
 
-SET ANSI_NULLS ON;
-GO
-SET QUOTED_IDENTIFIER ON;
-GO
+-- 15. Cập nhật thông tin Tài khoản
 CREATE OR ALTER PROCEDURE dbo.usp_TaiKhoan_Update
     @MaTaiKhoan BIGINT,
     @MatKhauHash VARCHAR(255),
@@ -1637,7 +1559,7 @@ BEGIN TRY
     ALTER TABLE [dbo].[YeuCauChuyenKhoa] NOCHECK CONSTRAINT ALL;
     DISABLE TRIGGER ALL ON [dbo].[YeuCauChuyenKhoa];
 
-    -- Table [dbo].[AuditLog] (2410 rows)
+    -- Table [dbo].[AuditLog] (2434 rows)
     SET IDENTITY_INSERT [dbo].[AuditLog] ON;
     INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (156, N'LOGOUT', N'admin', N'QuanTri', N'POST', N'/api/v1/auth/logout', 200, N'0:0:0:0:0:0:0:1', NULL, '2026-09-30T22:19:52.6280000');
     INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (157, N'LOGIN', N'bs_hung', N'BacSi', N'POST', N'/api/v1/auth/login', 200, N'0:0:0:0:0:0:0:1', NULL, '2026-09-30T22:19:55.4700000');
@@ -4049,9 +3971,33 @@ BEGIN TRY
     INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2563, N'LOGIN', N'lt_minh', N'LeTan', N'POST', N'/api/v1/auth/login', 200, N'172.68.197.132', NULL, '2026-10-21T08:23:40.1060000');
     INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2564, N'LOGOUT', N'lt_minh', N'LeTan', N'POST', N'/api/v1/auth/logout', 200, N'172.68.197.132', NULL, '2026-10-21T08:24:22.9060000');
     INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2565, N'LOGIN_FAILED', N'bn_an', NULL, N'POST', N'/api/v1/auth/login', 401, N'172.68.197.132', NULL, '2026-10-21T08:24:28.5350000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2566, N'LOGIN_FAILED', N'NguyenDinhKhanh', NULL, N'POST', N'/api/v1/auth/login', 401, N'162.158.163.208', NULL, '2026-10-22T00:08:03.8350000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2567, N'LOGIN', N'admin', N'QuanTri', N'POST', N'/api/v1/auth/login', 200, N'162.158.163.208', NULL, '2026-10-22T00:08:08.4040000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2568, N'LOGIN', N'ns_ngoc', N'QuanLyNhanSu', N'POST', N'/api/v1/auth/login', 200, N'162.158.163.208', NULL, '2026-10-22T00:10:00.4060000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2569, N'LOGOUT', N'ns_ngoc', N'QuanLyNhanSu', N'POST', N'/api/v1/auth/logout', 200, N'162.158.163.208', NULL, '2026-10-22T00:12:38.4530000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2570, N'LOGIN', N'bs_hung', N'BacSi', N'POST', N'/api/v1/auth/login', 200, N'162.158.163.208', NULL, '2026-10-22T00:12:42.8360000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2571, N'LOGOUT', N'bs_hung', N'BacSi', N'POST', N'/api/v1/auth/logout', 200, N'162.158.108.95', NULL, '2026-10-22T00:19:57.0500000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2572, N'LOGIN', N'tn_nga', N'ThuNgan', N'POST', N'/api/v1/auth/login', 200, N'162.158.108.95', NULL, '2026-10-22T00:20:01.3800000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2573, N'LOGOUT', N'tn_nga', N'ThuNgan', N'POST', N'/api/v1/auth/logout', 200, N'162.158.108.94', NULL, '2026-10-22T00:20:30.4510000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2574, N'LOGIN', N'ds_lan', N'DuocSi', N'POST', N'/api/v1/auth/login', 200, N'162.158.108.94', NULL, '2026-10-22T00:20:33.8820000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2575, N'LOGOUT', N'ds_lan', N'DuocSi', N'POST', N'/api/v1/auth/logout', 200, N'162.158.108.94', NULL, '2026-10-22T00:21:09.2160000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2576, N'LOGIN', N'ktv_huy', N'KTV', N'POST', N'/api/v1/auth/login', 200, N'162.158.108.95', NULL, '2026-10-22T00:21:11.9000000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2577, N'LOGOUT', N'ktv_huy', N'KTV', N'POST', N'/api/v1/auth/logout', 200, N'162.158.108.94', NULL, '2026-10-22T00:21:56.7530000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2578, N'LOGIN', N'dd_hoa', N'DieuDuong', N'POST', N'/api/v1/auth/login', 200, N'162.158.108.94', NULL, '2026-10-22T00:22:00.0040000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2579, N'LOGOUT', N'dd_hoa', N'DieuDuong', N'POST', N'/api/v1/auth/logout', 200, N'172.69.176.72', NULL, '2026-10-22T00:22:42.5200000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2580, N'LOGIN', N'lt_minh', N'LeTan', N'POST', N'/api/v1/auth/login', 200, N'172.69.176.72', NULL, '2026-10-22T00:22:45.6830000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2581, N'LOGOUT', N'lt_minh', N'LeTan', N'POST', N'/api/v1/auth/logout', 200, N'172.69.176.72', NULL, '2026-10-22T00:23:10.5040000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2582, N'LOGIN_FAILED', N'bn_an', NULL, N'POST', N'/api/v1/auth/login', 401, N'172.69.176.73', NULL, '2026-10-22T00:23:13.4380000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2583, N'LOGIN', N'PhanHuy', N'BacSi', N'POST', N'/api/v1/auth/login', 200, N'172.69.176.72', NULL, '2026-10-22T00:23:17.4910000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2584, N'LOGOUT', N'PhanHuy', N'BacSi', N'POST', N'/api/v1/auth/logout', 200, N'172.69.176.73', NULL, '2026-10-22T00:23:19.7730000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2585, N'LOGIN', N'DinhKhanh', N'BenhNhan', N'POST', N'/api/v1/auth/login', 200, N'172.69.176.72', NULL, '2026-10-22T00:23:36.5730000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2586, N'API_WRITE', N'DinhKhanh', N'BenhNhan', N'POST', N'/api/v1/benhnhan/me', 200, N'172.70.142.192', NULL, '2026-10-22T00:24:28.1840000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2587, N'API_WRITE', N'DinhKhanh', N'BenhNhan', N'POST', N'/api/v1/lichhen', 200, N'172.70.142.115', NULL, '2026-10-22T00:24:51.5570000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2588, N'LOGOUT', N'DinhKhanh', N'BenhNhan', N'POST', N'/api/v1/auth/logout', 200, N'172.70.142.115', NULL, '2026-10-22T00:25:25.1410000');
+    INSERT INTO [dbo].[AuditLog] ([AuditLogId], [EventType], [Username], [UserRole], [HttpMethod], [RequestPath], [HttpStatus], [RemoteAddress], [Details], [OccurredAt]) VALUES (2589, N'LOGIN', N'PhanHuy', N'BacSi', N'POST', N'/api/v1/auth/login', 200, N'172.70.142.115', NULL, '2026-10-22T00:44:12.0050000');
     SET IDENTITY_INSERT [dbo].[AuditLog] OFF;
 
-    -- Table [dbo].[BenhNhan] (22 rows)
+    -- Table [dbo].[BenhNhan] (23 rows)
     INSERT INTO [dbo].[BenhNhan] ([MaBenhNhan], [MaTaiKhoan], [HoTen], [NgaySinh], [GioiTinh], [SoCCCD], [MaBHYT], [NhomMau], [NgheNghiep], [DiaChi], [SoDienThoai], [Email], [NguoiLienHeKhanCap], [QuanHeNguoiLienHe], [SdtNguoiLienHe], [TienSuBenhNen], [TienSuDiUng], [NgayTaoHoSo]) VALUES (N'BN2026000001', NULL, N'Nguyễn Văn An', '1988-04-12', N'Nam', N'079088001234', N'DN4790880012345', N'O+', N'Kỹ sư', N'Quận 1, TP. Hồ Chí Minh', N'0912345678', N'an.nguyen@email.com', N'Nguyễn Văn Ba', N'Bố', N'0903112233', N'Đau dạ dày mạn', N'Dị ứng kháng sinh Penicillin', '2026-09-29T08:28:08.497');
     INSERT INTO [dbo].[BenhNhan] ([MaBenhNhan], [MaTaiKhoan], [HoTen], [NgaySinh], [GioiTinh], [SoCCCD], [MaBHYT], [NhomMau], [NgheNghiep], [DiaChi], [SoDienThoai], [Email], [NguoiLienHeKhanCap], [QuanHeNguoiLienHe], [SdtNguoiLienHe], [TienSuBenhNen], [TienSuDiUng], [NgayTaoHoSo]) VALUES (N'BN2026000002', NULL, N'Trần Thị Mai', '1995-10-25', N'Nu', N'079095005678', N'GD4790950056789', N'A+', N'Giáo viên', N'Quận 3, TP. Hồ Chí Minh', N'0987654321', N'mai.tran@email.com', N'Lê Văn Tự', N'Chồng', N'0988776655', N'Không có', N'Không có', '2026-09-29T08:28:08.497');
     INSERT INTO [dbo].[BenhNhan] ([MaBenhNhan], [MaTaiKhoan], [HoTen], [NgaySinh], [GioiTinh], [SoCCCD], [MaBHYT], [NhomMau], [NgheNghiep], [DiaChi], [SoDienThoai], [Email], [NguoiLienHeKhanCap], [QuanHeNguoiLienHe], [SdtNguoiLienHe], [TienSuBenhNen], [TienSuDiUng], [NgayTaoHoSo]) VALUES (N'BN2026000003', NULL, N'Lê Hoàng Long', '2001-01-15', N'Nam', N'079201009988', N'SV4792010099889', N'B+', N'Sinh viên', N'Bình Thạnh, TP. Hồ Chí Minh', N'0903112233', N'long.le@email.com', N'Hoàng Thị Cúc', N'Mẹ', N'0909112233', N'Viêm xoang mũi', N'Dị ứng Aspirin', '2026-09-29T08:28:08.497');
@@ -4074,6 +4020,7 @@ BEGIN TRY
     INSERT INTO [dbo].[BenhNhan] ([MaBenhNhan], [MaTaiKhoan], [HoTen], [NgaySinh], [GioiTinh], [SoCCCD], [MaBHYT], [NhomMau], [NgheNghiep], [DiaChi], [SoDienThoai], [Email], [NguoiLienHeKhanCap], [QuanHeNguoiLienHe], [SdtNguoiLienHe], [TienSuBenhNen], [TienSuDiUng], [NgayTaoHoSo]) VALUES (N'BN2026000020', NULL, N'AnhQuocNe', '1990-01-01', N'Nam', N'12345678902', NULL, NULL, NULL, NULL, N'0974754134', NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-21T03:02:53.953');
     INSERT INTO [dbo].[BenhNhan] ([MaBenhNhan], [MaTaiKhoan], [HoTen], [NgaySinh], [GioiTinh], [SoCCCD], [MaBHYT], [NhomMau], [NgheNghiep], [DiaChi], [SoDienThoai], [Email], [NguoiLienHeKhanCap], [QuanHeNguoiLienHe], [SdtNguoiLienHe], [TienSuBenhNen], [TienSuDiUng], [NgayTaoHoSo]) VALUES (N'BN2026000021', NULL, N'AnhQuocNe', '1990-01-01', N'Nam', N'1', NULL, NULL, NULL, NULL, N'0939597495', NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-21T03:05:32.710');
     INSERT INTO [dbo].[BenhNhan] ([MaBenhNhan], [MaTaiKhoan], [HoTen], [NgaySinh], [GioiTinh], [SoCCCD], [MaBHYT], [NhomMau], [NgheNghiep], [DiaChi], [SoDienThoai], [Email], [NguoiLienHeKhanCap], [QuanHeNguoiLienHe], [SdtNguoiLienHe], [TienSuBenhNen], [TienSuDiUng], [NgayTaoHoSo]) VALUES (N'BN2026000022', NULL, N'Bệnh nhân mới', '1990-01-01', N'Nam', N'123', NULL, NULL, NULL, NULL, N'0929933148', NULL, NULL, NULL, NULL, NULL, NULL, '2026-10-21T03:34:29.843');
+    INSERT INTO [dbo].[BenhNhan] ([MaBenhNhan], [MaTaiKhoan], [HoTen], [NgaySinh], [GioiTinh], [SoCCCD], [MaBHYT], [NhomMau], [NgheNghiep], [DiaChi], [SoDienThoai], [Email], [NguoiLienHeKhanCap], [QuanHeNguoiLienHe], [SdtNguoiLienHe], [TienSuBenhNen], [TienSuDiUng], [NgayTaoHoSo]) VALUES (N'BN2026000023', 88, N'Nguyễn Đình Khanh', '2006-11-11', N'Nam', N'094206123123', N'', NULL, N'', N'', N'0941231231', N'', N'', N'', N'', N'', N'', '2026-10-22T00:24:27.907');
 
     -- Table [dbo].[ChiTietHoaDon] (36 rows)
     INSERT INTO [dbo].[ChiTietHoaDon] ([MaChiTietHD], [MaHoaDon], [TenDichVu], [LoaiDichVu], [DonGia], [SoLuong]) VALUES (N'CTHD001', N'HD2026-001', N'Công khám Nội Tổng Hợp', N'Kham', 150000, 1);
@@ -4279,7 +4226,7 @@ BEGIN TRY
     INSERT INTO [dbo].[Khoa] ([MaKhoa], [TenKhoa], [MoTa], [MaTruongKhoa], [TrangThai]) VALUES (N'test', N'test', N'', NULL, 1);
     INSERT INTO [dbo].[Khoa] ([MaKhoa], [TenKhoa], [MoTa], [MaTruongKhoa], [TrangThai]) VALUES (N'TMH', N'Khoa Tai Mũi Họng', N'Khám và điều trị các bệnh lý tai mũi họng', N'NV-DOC03', 1);
 
-    -- Table [dbo].[LichHen] (53 rows)
+    -- Table [dbo].[LichHen] (54 rows)
     INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH2026000001', N'BN2026000001', N'KNT', N'NV-DOC01', '2026-09-29', '08:30:00.0000000', N'KhamThuong', N'Online', N'Đau thượng vị âm ỉ, ợ chua kéo dài', N'DaHuy', '2026-09-29T08:28:44.290', 30);
     INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH2026000002', N'BN2026000002', N'KNT', N'NV-DOC01', '2026-09-29', '09:00:00.0000000', N'KhamDichVu', N'TrucTiep', N'Sốt nhẹ 38 độ, mệt mỏi, đau nhức cơ', N'DaHuy', '2026-09-29T08:28:44.290', 45);
     INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH2026000003', N'BN2026000003', N'TMH', N'NV-DOC03', '2026-09-29', '10:00:00.0000000', N'KhamThuong', N'Online', N'Nghẹt mũi, chảy nước mũi trong, đau đầu', N'DaHuy', '2026-09-29T08:28:44.290', 30);
@@ -4332,6 +4279,7 @@ BEGIN TRY
     INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH2026000051', N'BN2026000006', N'KNT', N'NV-DOC01', '2026-10-21', '05:30:00.0000000', N'KhamThuong', N'Online', N'', N'DaKham', '2026-10-21T04:59:22.477', 30);
     INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH2026000052', N'BN2026000006', N'KNT', N'NV-DOC01', '2026-10-21', '06:00:00.0000000', N'KhamThuong', N'Online', N'', N'DaKham', '2026-10-21T05:32:22.607', 30);
     INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH2026000053', N'BN2026000001', N'KNT', N'NV-DOC01', '2026-10-21', '06:30:00.0000000', N'KhamThuong', N'TrucTiep', N'', N'DaKham', '2026-10-21T06:11:10.923', 30);
+    INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH2026000054', N'BN2026000023', N'CLS', N'NV-DOC20', '2026-10-22', '08:30:00.0000000', N'KhamThuong', N'Online', N'', N'DaDatLich', '2026-10-22T00:24:51.403', 30);
     INSERT INTO [dbo].[LichHen] ([MaLichHen], [MaBenhNhan], [MaKhoa], [MaBacSi], [NgayKham], [GioKham], [LoaiKham], [HinhThucDat], [LyDoKham], [TrangThai], [NgayDatLich], [ThoiGianKhamDuKien]) VALUES (N'LH4957415', N'BN2026000006', N'KNT', N'NV-DOC01', '2026-10-21', '08:30:00.0000000', N'TaiKham', N'TrucTiep', N'Tái khám theo hẹn: K29.7 - Viêm dạ dày mạn tính, không đặc hiệu', N'DaHuy', '2026-10-14T15:02:37.417', 30);
 
     -- Table [dbo].[LichSuPhanCongKhoa] (26 rows)
@@ -4630,4 +4578,3 @@ BEGIN CATCH
     THROW;
 END CATCH;
 GO
-
