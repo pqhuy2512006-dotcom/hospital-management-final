@@ -1,4 +1,4 @@
-﻿USE QuanLyBenhVien;
+USE QuanLyBenhVien;
 GO
 
 SET ANSI_NULLS ON;
@@ -381,7 +381,7 @@ BEGIN
 END;
 GO
 
--- 13. Lưu dữ liệu bảng tổng quát từ JSON (Generic Save)
+-- 13. Lưu dữ liệu bảng tổng quát từ JSON (Generic Save - Rút gọn tối ưu)
 CREATE OR ALTER PROCEDURE dbo.usp_Entity_Save
     @EntityName SYSNAME,
     @Payload NVARCHAR(MAX)
@@ -389,9 +389,11 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- 1. Kiểm tra JSON hợp lệ
     IF ISJSON(@Payload) <> 1
         THROW 50001, 'Entity payload must be valid JSON.', 1;
 
+    -- 2. Danh sách bảng cho phép (Bảo mật SQL Injection)
     IF @EntityName NOT IN (
         N'AuditLog', N'BenhNhan', N'ChiTietHoaDon', N'ChiTietKetQuaCLS', N'ChiTietNhapKho',
         N'DichVuCLS', N'DonThuoc', N'GiuongBenh', N'HoaDon', N'KetQuaCLS', N'Khoa',
@@ -400,6 +402,7 @@ BEGIN
     )
         THROW 50002, 'Entity is not allowed for generic persistence.', 1;
 
+    -- 3. Tìm cột Khóa chính (Primary Key) của bảng
     DECLARE @ObjectId INT = OBJECT_ID(N'dbo.' + QUOTENAME(@EntityName), N'U');
     DECLARE @KeyColumn SYSNAME;
 
@@ -412,55 +415,49 @@ BEGIN
     IF @KeyColumn IS NULL
         THROW 50003, 'Entity table has no primary key.', 1;
 
+    -- 4. Tạo đồng thời các cột INSERT và UPDATE trong 1 lệnh duy nhất
     DECLARE @QualifiedTable NVARCHAR(300) = N'dbo.' + QUOTENAME(@EntityName);
     DECLARE @KeyValue NVARCHAR(4000) = JSON_VALUE(@Payload, N'$.' + QUOTENAME(@KeyColumn, '"'));
-    DECLARE @InsertColumns NVARCHAR(MAX);
-    DECLARE @InsertValues NVARCHAR(MAX);
-    DECLARE @UpdateSet NVARCHAR(MAX);
+    DECLARE @InsertCols NVARCHAR(MAX), @InsertVals NVARCHAR(MAX), @UpdateSet NVARCHAR(MAX);
 
-    SELECT
-        @InsertColumns = STRING_AGG(CONVERT(NVARCHAR(MAX), QUOTENAME(c.name)), N',') WITHIN GROUP (ORDER BY c.column_id),
-        @InsertValues = STRING_AGG(CONVERT(NVARCHAR(MAX), N'(SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')'), N',') WITHIN GROUP (ORDER BY c.column_id)
+    SELECT 
+        @InsertCols = STRING_AGG(CONVERT(NVARCHAR(MAX), QUOTENAME(c.name)), N',') WITHIN GROUP (ORDER BY c.column_id),
+        @InsertVals = STRING_AGG(CONVERT(NVARCHAR(MAX), N'(SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')'), N',') WITHIN GROUP (ORDER BY c.column_id),
+        @UpdateSet  = STRING_AGG(CASE WHEN c.name <> @KeyColumn 
+                                      THEN CONVERT(NVARCHAR(MAX), QUOTENAME(c.name) + N' = (SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')') 
+                                 END, N',') WITHIN GROUP (ORDER BY c.column_id)
     FROM sys.columns c
+    JOIN OPENJSON(@Payload) j ON j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT
     WHERE c.object_id = @ObjectId
       AND c.is_identity = 0
       AND c.is_computed = 0
-      AND c.generated_always_type = 0
-      AND EXISTS (SELECT 1 FROM OPENJSON(@Payload) j WHERE j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT);
+      AND c.generated_always_type = 0;
 
-    SELECT @UpdateSet = STRING_AGG(
-        CONVERT(NVARCHAR(MAX), QUOTENAME(c.name) + N' = (SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')'), N',') WITHIN GROUP (ORDER BY c.column_id)
-    FROM sys.columns c
-    WHERE c.object_id = @ObjectId
-      AND c.name <> @KeyColumn
-      AND c.is_identity = 0
-      AND c.is_computed = 0
-      AND c.generated_always_type = 0
-      AND EXISTS (SELECT 1 FROM OPENJSON(@Payload) j WHERE j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT);
-
-    -- Nếu có truyền KeyValue và bản ghi đã tồn tại thì UPDATE
+    -- 5. Nếu có khóa chính và bản ghi đã tồn tại -> UPDATE
     IF @KeyValue IS NOT NULL
     BEGIN
         DECLARE @Exists BIT = 0;
-        DECLARE @ExistsSql NVARCHAR(MAX) = N'SELECT @Found = CASE WHEN EXISTS (SELECT 1 FROM ' + @QualifiedTable
-            + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value) THEN 1 ELSE 0 END;';
-        EXEC sys.sp_executesql @ExistsSql, N'@Value NVARCHAR(4000), @Found BIT OUTPUT', @Value = @KeyValue, @Found = @Exists OUTPUT;
+        EXEC sys.sp_executesql 
+            N'SELECT @Found = CASE WHEN EXISTS (SELECT 1 FROM ' + @QualifiedTable + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value) THEN 1 ELSE 0 END;',
+            N'@Value NVARCHAR(4000), @Found BIT OUTPUT', @Value = @KeyValue, @Found = @Exists OUTPUT;
 
         IF @Exists = 1
         BEGIN
-            IF @UpdateSet IS NULL RETURN;
-            DECLARE @UpdateSql NVARCHAR(MAX) = N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;';
-            EXEC sys.sp_executesql @UpdateSql, N'@Payload NVARCHAR(MAX), @Value NVARCHAR(4000)', @Payload = @Payload, @Value = @KeyValue;
+            IF @UpdateSet IS NOT NULL
+                EXEC sys.sp_executesql 
+                    N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;',
+                    N'@Payload NVARCHAR(MAX), @Value NVARCHAR(4000)', @Payload = @Payload, @Value = @KeyValue;
             RETURN;
         END
     END
 
-    -- Ngược lại thực hiện INSERT
-    IF @InsertColumns IS NULL
+    -- 6. Nếu chưa tồn tại -> INSERT
+    IF @InsertCols IS NULL
         THROW 50004, 'No writable entity columns found in payload.', 1;
 
-    DECLARE @InsertSql NVARCHAR(MAX) = N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertColumns + N') SELECT ' + @InsertValues + N';';
-    EXEC sys.sp_executesql @InsertSql, N'@Payload NVARCHAR(MAX)', @Payload = @Payload;
+    EXEC sys.sp_executesql 
+        N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertCols + N') SELECT ' + @InsertVals + N';',
+        N'@Payload NVARCHAR(MAX)', @Payload = @Payload;
 END;
 GO
 
