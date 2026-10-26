@@ -1,5 +1,6 @@
-﻿/* ======================================================================
+/* ======================================================================
    01_Tables_Constraints.sql
+   Database [QuanLyBenhVien] - Bảng và toàn bộ Ràng buộc (Inline DDL)
    ====================================================================== */
 IF DB_ID(N'QuanLyBenhVien') IS NULL
 BEGIN
@@ -13,25 +14,81 @@ GO
 SET QUOTED_IDENTIFIER ON;
 GO
 
-CREATE TABLE [dbo].[AuditLog] (
-    [AuditLogId] bigint IDENTITY(1,1) NOT NULL,
-    [EventType] varchar(40) NOT NULL,
-    [Username] varchar(50) NULL,
-    [UserRole] varchar(20) NULL,
-    [HttpMethod] varchar(10) NOT NULL,
-    [RequestPath] varchar(255) NOT NULL,
-    [HttpStatus] int NOT NULL,
-    [RemoteAddress] varchar(64) NULL,
-    [Details] varchar(500) NULL,
-    [OccurredAt] datetime2(7) CONSTRAINT [DF__AuditLog__Occurr__3C34F16F] DEFAULT (sysutcdatetime()) NOT NULL
+-- 1. Bảng TaiKhoan (Độc lập)
+CREATE TABLE [dbo].[TaiKhoan] (
+    [MaTaiKhoan] bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [TenDangNhap] varchar(50) NOT NULL UNIQUE,
+    [MatKhauHash] varchar(255) NOT NULL,
+    [Email] varchar(100) NULL,
+    [SoDienThoai] varchar(15) NOT NULL UNIQUE,
+    [VaiTro] varchar(20) NOT NULL CHECK ([VaiTro] IN ('QuanLyNhanSu','BacSi','DieuDuong','LeTan','DuocSi','KTV','ThuNgan','QuanTri','BenhNhan')),
+    [TrangThai] bit NOT NULL DEFAULT 1,
+    [NgayTao] datetime NOT NULL DEFAULT getdate()
 );
 GO
+
+-- 2. Bảng Khoa
+CREATE TABLE [dbo].[Khoa] (
+    [MaKhoa] varchar(10) NOT NULL PRIMARY KEY,
+    [TenKhoa] nvarchar(100) NOT NULL,
+    [MoTa] nvarchar(300) NULL,
+    [MaTruongKhoa] varchar(15) NULL,
+    [TrangThai] bit NOT NULL DEFAULT 1
+);
+GO
+
+-- 3. Bảng Phong (Tham chiếu Khoa)
+CREATE TABLE [dbo].[Phong] (
+    [MaPhong] varchar(15) NOT NULL PRIMARY KEY,
+    [TenPhong] nvarchar(100) NOT NULL,
+    [LoaiPhong] varchar(20) NOT NULL CHECK ([LoaiPhong] IN ('PHAU_THUAT','XET_NGHIEM','LUU_BENH','KHAM_BENH')),
+    [MaKhoa] varchar(10) NOT NULL REFERENCES [dbo].[Khoa]([MaKhoa]),
+    [TrangThai] bit NOT NULL DEFAULT 1
+);
+GO
+
+-- 4. Bảng GiuongBenh (Tham chiếu Phong)
+CREATE TABLE [dbo].[GiuongBenh] (
+    [MaGiuong] varchar(15) NOT NULL PRIMARY KEY,
+    [SoGiuong] varchar(20) NOT NULL,
+    [TrangThai] varchar(20) NOT NULL DEFAULT 'Trong' CHECK ([TrangThai] IN ('BaoTri','DangSuDung','Trong')),
+    [DonGiaNgay] decimal(12,0) NOT NULL DEFAULT 0 CHECK ([DonGiaNgay] >= 0),
+    [MaPhong] varchar(15) NOT NULL REFERENCES [dbo].[Phong]([MaPhong])
+);
+GO
+
+-- 5. Bảng NhanVien (Tham chiếu TaiKhoan, Khoa, Phong)
+CREATE TABLE [dbo].[NhanVien] (
+    [MaNhanVien] varchar(15) NOT NULL PRIMARY KEY,
+    [MaTaiKhoan] bigint NULL REFERENCES [dbo].[TaiKhoan]([MaTaiKhoan]),
+    [HoTen] nvarchar(100) NOT NULL,
+    [NgaySinh] date NULL,
+    [GioiTinh] varchar(10) NULL CHECK ([GioiTinh] IN ('Nam','Nu','Khac')),
+    [SoCCCD] varchar(12) NULL,
+    [SoDienThoai] varchar(15) NOT NULL UNIQUE,
+    [Email] varchar(100) NULL,
+    [MaPhong] varchar(15) NULL REFERENCES [dbo].[Phong]([MaPhong]),
+    [ChungChiHanhNghe] varchar(50) NULL,
+    [TrinhDoChuyenMon] nvarchar(100) NULL,
+    [NgayVaoLam] date NULL,
+    [VaiTro] varchar(20) NOT NULL CHECK ([VaiTro] IN ('QuanLyNhanSu','BacSi','DieuDuong','LeTan','DuocSi','KTV','ThuNgan','QuanTri')),
+    [TrangThai] varchar(20) NOT NULL DEFAULT 'DangLamViec' CHECK ([TrangThai] IN ('DangLamViec','DaNghi')),
+    [MaKhoa] varchar(10) NULL REFERENCES [dbo].[Khoa]([MaKhoa])
+);
+GO
+
+-- Khóa ngoại vòng: Cập nhật Trưởng khoa trỏ về Nhân viên
+ALTER TABLE [dbo].[Khoa] 
+ADD CONSTRAINT [FK_Khoa_TruongKhoa] FOREIGN KEY ([MaTruongKhoa]) REFERENCES [dbo].[NhanVien]([MaNhanVien]);
+GO
+
+-- 6. Bảng BenhNhan (Tham chiếu TaiKhoan)
 CREATE TABLE [dbo].[BenhNhan] (
-    [MaBenhNhan] varchar(15) NOT NULL,
-    [MaTaiKhoan] bigint NULL,
+    [MaBenhNhan] varchar(15) NOT NULL PRIMARY KEY,
+    [MaTaiKhoan] bigint NULL REFERENCES [dbo].[TaiKhoan]([MaTaiKhoan]),
     [HoTen] nvarchar(100) NOT NULL,
     [NgaySinh] date NOT NULL,
-    [GioiTinh] varchar(10) NOT NULL,
+    [GioiTinh] varchar(10) NOT NULL CHECK ([GioiTinh] IN ('Nam','Nu','Khac')),
     [SoCCCD] varchar(12) NULL,
     [MaBHYT] varchar(15) NULL,
     [NhomMau] varchar(5) NULL,
@@ -44,181 +101,60 @@ CREATE TABLE [dbo].[BenhNhan] (
     [SdtNguoiLienHe] varchar(15) NULL,
     [TienSuBenhNen] nvarchar(500) NULL,
     [TienSuDiUng] nvarchar(500) NULL,
-    [NgayTaoHoSo] datetime CONSTRAINT [DF__BenhNhan__NgayTa__628FA481] DEFAULT (getdate()) NOT NULL
+    [NgayTaoHoSo] datetime NOT NULL DEFAULT getdate()
 );
 GO
-CREATE TABLE [dbo].[ChiTietHoaDon] (
-    [MaChiTietHD] varchar(15) NOT NULL,
-    [MaHoaDon] varchar(15) NOT NULL,
-    [TenDichVu] nvarchar(150) NOT NULL,
-    [LoaiDichVu] varchar(20) NOT NULL,
-    [DonGia] decimal(12,0) NOT NULL,
-    [SoLuong] int CONSTRAINT [DF__ChiTietHo__SoLuo__367C1819] DEFAULT ((1)) NOT NULL,
-    [ThanhTien] AS ([DonGia]*[SoLuong]) PERSISTED
-);
-GO
-CREATE TABLE [dbo].[ChiTietKetQuaCLS] (
-    [MaChiTietXN] varchar(15) NOT NULL,
-    [MaKetQua] varchar(15) NOT NULL,
-    [TenChiSo] nvarchar(100) NOT NULL,
-    [GiaTri] varchar(30) NULL,
-    [DonVi] varchar(20) NULL,
-    [KhoangThamChieu] varchar(50) NULL,
-    [DanhGia] varchar(20) NULL
-);
-GO
-CREATE TABLE [dbo].[ChiTietNhapKho] (
-    [MaChiTietNhap] varchar(15) NOT NULL,
-    [MaPhieuNhap] varchar(15) NOT NULL,
-    [MaThuoc] varchar(15) NOT NULL,
-    [SoLo] varchar(30) NOT NULL,
-    [SoLuong] int NOT NULL,
-    [DonGia] decimal(12,0) NOT NULL,
-    [ThanhTien] AS ([SoLuong]*[DonGia]) PERSISTED,
-    [HanSuDung] date NOT NULL,
-    [SoLuongTon] int NULL
-);
-GO
+
+-- 7. Bảng DichVuCLS (Độc lập)
 CREATE TABLE [dbo].[DichVuCLS] (
-    [MaDichVu] varchar(15) NOT NULL,
+    [MaDichVu] varchar(15) NOT NULL PRIMARY KEY,
     [TenDichVu] nvarchar(150) NOT NULL,
-    [DonGia] decimal(12,0) NOT NULL,
+    [DonGia] decimal(12,0) NOT NULL CHECK ([DonGia] >= 0),
     [DonViTinh] nvarchar(20) NULL,
     [KhoangThamChieu] nvarchar(100) NULL
 );
 GO
-CREATE TABLE [dbo].[DonThuoc] (
-    [MaDonThuoc] varchar(15) NOT NULL,
-    [MaPhieuKham] varchar(15) NOT NULL,
-    [MaThuoc] varchar(15) NOT NULL,
-    [SoLo] varchar(30) NULL,
+
+-- 8. Bảng Thuoc (Độc lập)
+CREATE TABLE [dbo].[Thuoc] (
+    [MaThuoc] varchar(15) NOT NULL PRIMARY KEY,
+    [TenThuoc] nvarchar(150) NOT NULL,
     [DonViTinh] varchar(20) NOT NULL,
-    [SoLuong] int NOT NULL,
-    [LieuDung] nvarchar(100) NULL,
-    [CachDung] nvarchar(200) NULL,
-    [TrangThai] varchar(20) CONSTRAINT [DF__DonThuoc__TrangT__7908F585] DEFAULT ('PENDING') NULL
+    [DonGiaBan] decimal(12,0) NOT NULL CHECK ([DonGiaBan] >= 0),
+    [TonKhoHienTai] int NOT NULL DEFAULT 0 CHECK ([TonKhoHienTai] >= 0),
+    [NguongCanhBao] int NOT NULL DEFAULT 10
 );
 GO
-CREATE TABLE [dbo].[GiuongBenh] (
-    [MaGiuong] varchar(15) NOT NULL,
-    [SoGiuong] varchar(20) NOT NULL,
-    [TrangThai] varchar(20) CONSTRAINT [DF__GiuongBen__Trang__7C4F7684] DEFAULT ('Trong') NOT NULL,
-    [DonGiaNgay] decimal(12,0) CONSTRAINT [DF__GiuongBen__DonGi__7E37BEF6] DEFAULT ((0)) NOT NULL,
-    [MaPhong] varchar(15) NOT NULL
-);
-GO
-CREATE TABLE [dbo].[HoaDon] (
-    [MaHoaDon] varchar(15) NOT NULL,
-    [MaBenhNhan] varchar(15) NOT NULL,
-    [MaPhieuKham] varchar(15) NOT NULL,
-    [NgayLap] datetime CONSTRAINT [DF__HoaDon__NgayLap__2A164134] DEFAULT (getdate()) NOT NULL,
-    [TongTienDichVu] decimal(12,0) CONSTRAINT [DF__HoaDon__TongTien__2B0A656D] DEFAULT ((0)) NOT NULL,
-    [BHYTChiTra] decimal(12,0) CONSTRAINT [DF__HoaDon__BHYTChiT__2BFE89A6] DEFAULT ((0)) NOT NULL,
-    [TongThanhToan] AS ([TongTienDichVu]-[BHYTChiTra]) PERSISTED,
-    [HinhThucThanhToan] varchar(30) NOT NULL,
-    [TrangThaiTT] varchar(20) CONSTRAINT [DF__HoaDon__TrangTha__2DE6D218] DEFAULT ('ChuaThanhToan') NOT NULL,
-    [NhanVienThu] varchar(15) NOT NULL,
-    [NgayThanhToan] datetime NULL
-);
-GO
-CREATE TABLE [dbo].[KetQuaCLS] (
-    [MaKetQua] varchar(15) NOT NULL,
-    [MaPhieuKham] varchar(15) NOT NULL,
-    [MaBenhNhan] varchar(15) NOT NULL,
-    [MaDichVu] varchar(15) NULL,
-    [MaKTV] varchar(15) NOT NULL,
-    [MaBacSiDoc] varchar(15) NULL,
-    [LoaiXetNghiem] nvarchar(100) NOT NULL,
-    [KetLuan] nvarchar(500) NULL,
-    [NgayThucHien] datetime CONSTRAINT [DF__KetQuaCLS__NgayT__1332DBDC] DEFAULT (getdate()) NOT NULL,
-    [HinhAnhFile] nvarchar(MAX) NULL
-);
-GO
-CREATE TABLE [dbo].[Khoa] (
-    [MaKhoa] varchar(10) NOT NULL,
-    [TenKhoa] nvarchar(100) NOT NULL,
-    [MoTa] nvarchar(300) NULL,
-    [MaTruongKhoa] varchar(15) NULL,
-    [TrangThai] bit CONSTRAINT [DF__Khoa__TrangThai__473C8FC7] DEFAULT ((1)) NOT NULL
-);
-GO
+
+-- 9. Bảng LichHen (Tham chiếu BenhNhan, Khoa, NhanVien)
 CREATE TABLE [dbo].[LichHen] (
-    [MaLichHen] varchar(15) NOT NULL,
-    [MaBenhNhan] varchar(15) NOT NULL,
-    [MaKhoa] varchar(10) NOT NULL,
-    [MaBacSi] varchar(15) NULL,
+    [MaLichHen] varchar(15) NOT NULL PRIMARY KEY,
+    [MaBenhNhan] varchar(15) NOT NULL REFERENCES [dbo].[BenhNhan]([MaBenhNhan]),
+    [MaKhoa] varchar(10) NOT NULL REFERENCES [dbo].[Khoa]([MaKhoa]),
+    [MaBacSi] varchar(15) NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
     [NgayKham] date NOT NULL,
     [GioKham] time(7) NOT NULL,
-    [LoaiKham] varchar(20) NOT NULL,
-    [HinhThucDat] varchar(20) NOT NULL,
+    [LoaiKham] varchar(20) NOT NULL CHECK ([LoaiKham] IN ('TaiKham','KhamDichVu','KhamThuong')),
+    [HinhThucDat] varchar(20) NOT NULL CHECK ([HinhThucDat] IN ('DienThoai','TrucTiep','Online')),
     [LyDoKham] nvarchar(300) NULL,
-    [TrangThai] varchar(20) CONSTRAINT [DF__LichHen__TrangTh__6E01572D] DEFAULT ('ChoXacNhan') NOT NULL,
-    [NgayDatLich] datetime CONSTRAINT [DF__LichHen__NgayDat__6FE99F9F] DEFAULT (getdate()) NOT NULL,
-    [ThoiGianKhamDuKien] int NOT NULL
+    [TrangThai] varchar(20) NOT NULL DEFAULT 'ChoXacNhan' CHECK ([TrangThai] IN ('DaHuy','DaKham','ChoKetQuaCLS','DangKham','DangChoKham','DaDatLich')),
+    [NgayDatLich] datetime NOT NULL DEFAULT getdate(),
+    [ThoiGianKhamDuKien] int NOT NULL,
+    CONSTRAINT [CK_LichHen_ThoiGianKhamDuKien] CHECK (
+        ([LoaiKham] IN ('TaiKham','KhamThuong') AND [ThoiGianKhamDuKien] = 30) OR 
+        ([LoaiKham] = 'KhamDichVu' AND [ThoiGianKhamDuKien] = 45)
+    )
 );
 GO
-CREATE TABLE [dbo].[LichSuPhanCongKhoa] (
-    [MaPhanCong] int IDENTITY(1,1) NOT NULL,
-    [MaNhanVien] varchar(15) NOT NULL,
-    [MaKhoa] varchar(10) NOT NULL,
-    [ChucVu] nvarchar(100) NULL,
-    [NgayBatDau] date CONSTRAINT [DF__LichSuPha__NgayB__3429BB53] DEFAULT (CONVERT([date],getdate())) NOT NULL,
-    [NgayKetThuc] date NULL,
-    [LyDo] nvarchar(255) NULL,
-    [TrangThai] nvarchar(30) CONSTRAINT [DF__LichSuPha__Trang__351DDF8C] DEFAULT (N'DangCongTac') NULL
-);
-GO
-CREATE TABLE [dbo].[LichSuTruongKhoa] (
-    [MaLichSu] int IDENTITY(1,1) NOT NULL,
-    [MaKhoa] varchar(10) NOT NULL,
-    [MaNhanVien] varchar(15) NOT NULL,
-    [NgayBoNhiem] datetime CONSTRAINT [DF__LichSuTru__NgayB__2D7CBDC4] DEFAULT (getdate()) NULL,
-    [NgayMienNhiem] datetime NULL
-);
-GO
-CREATE TABLE [dbo].[LichTruc] (
-    [MaLichTruc] varchar(15) NOT NULL,
-    [MaNhanVien] varchar(15) NOT NULL,
-    [Ngay] date NOT NULL,
-    [Ca] varchar(10) NOT NULL,
-    [MaKhoa] varchar(10) NULL
-);
-GO
-CREATE TABLE [dbo].[NhanVien] (
-    [MaNhanVien] varchar(15) NOT NULL,
-    [MaTaiKhoan] bigint NULL,
-    [HoTen] nvarchar(100) NOT NULL,
-    [NgaySinh] date NULL,
-    [GioiTinh] varchar(10) NULL,
-    [SoCCCD] varchar(12) NULL,
-    [SoDienThoai] varchar(15) NOT NULL,
-    [Email] varchar(100) NULL,
-    [MaPhong] varchar(15) NULL,
-    [ChungChiHanhNghe] varchar(50) NULL,
-    [TrinhDoChuyenMon] nvarchar(100) NULL,
-    [NgayVaoLam] date NULL,
-    [VaiTro] varchar(20) NOT NULL,
-    [TrangThai] varchar(20) CONSTRAINT [DF__NhanVien__TrangT__5BE2A6F2] DEFAULT ('DangLamViec') NOT NULL,
-    [MaKhoa] varchar(10) NULL
-);
-GO
-CREATE TABLE [dbo].[NoiTru] (
-    [MaNoiTru] varchar(15) NOT NULL,
-    [MaBenhNhan] varchar(15) NOT NULL,
-    [MaGiuong] varchar(15) NOT NULL,
-    [MaPhieuKham] varchar(15) NOT NULL,
-    [NgayNhapVien] datetime CONSTRAINT [DF__NoiTru__NgayNhap__02FC7413] DEFAULT (getdate()) NOT NULL,
-    [NgayXuatVien] datetime NULL,
-    [TrangThai] varchar(20) CONSTRAINT [DF__NoiTru__TrangTha__03F0984C] DEFAULT ('DangNam') NOT NULL
-);
-GO
+
+-- 10. Bảng PhieuKham (Tham chiếu BenhNhan, NhanVien, Khoa, LichHen)
 CREATE TABLE [dbo].[PhieuKham] (
-    [MaPhieuKham] varchar(15) NOT NULL,
-    [MaBenhNhan] varchar(15) NOT NULL,
-    [MaBacSi] varchar(15) NOT NULL,
-    [MaKhoa] varchar(10) NOT NULL,
-    [MaLichHen] varchar(15) NULL,
-    [NgayKham] datetime CONSTRAINT [DF__PhieuKham__NgayK__75A278F5] DEFAULT (getdate()) NOT NULL,
+    [MaPhieuKham] varchar(15) NOT NULL PRIMARY KEY,
+    [MaBenhNhan] varchar(15) NOT NULL REFERENCES [dbo].[BenhNhan]([MaBenhNhan]),
+    [MaBacSi] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [MaKhoa] varchar(10) NOT NULL REFERENCES [dbo].[Khoa]([MaKhoa]),
+    [MaLichHen] varchar(15) NULL REFERENCES [dbo].[LichHen]([MaLichHen]),
+    [NgayKham] datetime NOT NULL DEFAULT getdate(),
     [Mach] int NULL,
     [NhietDo] decimal(4,1) NULL,
     [HuyetAp] varchar(15) NULL,
@@ -232,187 +168,200 @@ CREATE TABLE [dbo].[PhieuKham] (
     [NgayHenTaiKham] date NULL
 );
 GO
+
+-- 11. Bảng HoaDon (Tham chiếu BenhNhan, PhieuKham, NhanVien)
+CREATE TABLE [dbo].[HoaDon] (
+    [MaHoaDon] varchar(15) NOT NULL PRIMARY KEY,
+    [MaBenhNhan] varchar(15) NOT NULL REFERENCES [dbo].[BenhNhan]([MaBenhNhan]),
+    [MaPhieuKham] varchar(15) NOT NULL REFERENCES [dbo].[PhieuKham]([MaPhieuKham]),
+    [NgayLap] datetime NOT NULL DEFAULT getdate(),
+    [TongTienDichVu] decimal(12,0) NOT NULL DEFAULT 0,
+    [BHYTChiTra] decimal(12,0) NOT NULL DEFAULT 0,
+    [TongThanhToan] AS ([TongTienDichVu]-[BHYTChiTra]) PERSISTED,
+    [HinhThucThanhToan] varchar(30) NOT NULL CHECK ([HinhThucThanhToan] IN ('ViDienTu','ChuyenKhoan','TienMat')),
+    [TrangThaiTT] varchar(20) NOT NULL DEFAULT 'ChuaThanhToan' CHECK ([TrangThaiTT] IN ('HoanTien','DaThanhToan','ChuaThanhToan')),
+    [NhanVienThu] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [NgayThanhToan] datetime NULL
+);
+GO
+
+-- 12. Bảng ChiTietHoaDon (Tham chiếu HoaDon)
+CREATE TABLE [dbo].[ChiTietHoaDon] (
+    [MaChiTietHD] varchar(15) NOT NULL PRIMARY KEY,
+    [MaHoaDon] varchar(15) NOT NULL REFERENCES [dbo].[HoaDon]([MaHoaDon]),
+    [TenDichVu] nvarchar(150) NOT NULL,
+    [LoaiDichVu] varchar(20) NOT NULL CHECK ([LoaiDichVu] IN ('Giuong','Thuoc','CanLamSang','Kham')),
+    [DonGia] decimal(12,0) NOT NULL CHECK ([DonGia] >= 0),
+    [SoLuong] int NOT NULL DEFAULT 1 CHECK ([SoLuong] > 0),
+    [ThanhTien] AS ([DonGia]*[SoLuong]) PERSISTED
+);
+GO
+
+-- 13. Bảng DonThuoc (Tham chiếu PhieuKham, Thuoc)
+CREATE TABLE [dbo].[DonThuoc] (
+    [MaDonThuoc] varchar(15) NOT NULL PRIMARY KEY,
+    [MaPhieuKham] varchar(15) NOT NULL REFERENCES [dbo].[PhieuKham]([MaPhieuKham]),
+    [MaThuoc] varchar(15) NOT NULL REFERENCES [dbo].[Thuoc]([MaThuoc]),
+    [SoLo] varchar(30) NULL,
+    [DonViTinh] varchar(20) NOT NULL,
+    [SoLuong] int NOT NULL CHECK ([SoLuong] > 0),
+    [LieuDung] nvarchar(100) NULL,
+    [CachDung] nvarchar(200) NULL,
+    [TrangThai] varchar(20) NULL DEFAULT 'PENDING'
+);
+GO
+
+-- 14. Bảng KetQuaCLS (Tham chiếu PhieuKham, BenhNhan, DichVuCLS, NhanVien)
+CREATE TABLE [dbo].[KetQuaCLS] (
+    [MaKetQua] varchar(15) NOT NULL PRIMARY KEY,
+    [MaPhieuKham] varchar(15) NOT NULL REFERENCES [dbo].[PhieuKham]([MaPhieuKham]),
+    [MaBenhNhan] varchar(15) NOT NULL REFERENCES [dbo].[BenhNhan]([MaBenhNhan]),
+    [MaDichVu] varchar(15) NULL REFERENCES [dbo].[DichVuCLS]([MaDichVu]),
+    [MaKTV] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [MaBacSiDoc] varchar(15) NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [LoaiXetNghiem] nvarchar(100) NOT NULL,
+    [KetLuan] nvarchar(500) NULL,
+    [NgayThucHien] datetime NOT NULL DEFAULT getdate(),
+    [HinhAnhFile] nvarchar(MAX) NULL
+);
+GO
+
+-- 15. Bảng ChiTietKetQuaCLS (Tham chiếu KetQuaCLS)
+CREATE TABLE [dbo].[ChiTietKetQuaCLS] (
+    [MaChiTietXN] varchar(15) NOT NULL PRIMARY KEY,
+    [MaKetQua] varchar(15) NOT NULL REFERENCES [dbo].[KetQuaCLS]([MaKetQua]),
+    [TenChiSo] nvarchar(100) NOT NULL,
+    [GiaTri] varchar(30) NULL,
+    [DonVi] varchar(20) NULL,
+    [KhoangThamChieu] varchar(50) NULL,
+    [DanhGia] varchar(20) NULL CHECK ([DanhGia] IN ('Thap','Cao','BinhThuong'))
+);
+GO
+
+-- 16. Bảng PhieuNhapKho (Tham chiếu NhanVien)
 CREATE TABLE [dbo].[PhieuNhapKho] (
-    [MaPhieuNhap] varchar(15) NOT NULL,
-    [NgayNhap] date CONSTRAINT [DF__PhieuNhap__NgayN__1EA48E88] DEFAULT (CONVERT([date],getdate())) NOT NULL,
+    [MaPhieuNhap] varchar(15) NOT NULL PRIMARY KEY,
+    [NgayNhap] date NOT NULL DEFAULT (CONVERT(date, getdate())),
     [NhaCungCap] nvarchar(150) NOT NULL,
     [SoHoaDonNCC] varchar(30) NULL,
-    [NguoiNhap] varchar(15) NOT NULL,
-    [NguoiDuyet] varchar(15) NULL,
-    [TongTien] decimal(14,0) CONSTRAINT [DF__PhieuNhap__TongT__1F98B2C1] DEFAULT ((0)) NOT NULL
+    [NguoiNhap] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [NguoiDuyet] varchar(15) NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [TongTien] decimal(14,0) NOT NULL DEFAULT 0
 );
 GO
-CREATE TABLE [dbo].[Phong] (
-    [MaPhong] varchar(15) NOT NULL,
-    [TenPhong] nvarchar(100) NOT NULL,
-    [LoaiPhong] varchar(20) NOT NULL,
-    [MaKhoa] varchar(10) NOT NULL,
-    [TrangThai] bit CONSTRAINT [DF__Phong__TrangThai__27C3E46E] DEFAULT ((1)) NOT NULL
+
+-- 17. Bảng ChiTietNhapKho (Tham chiếu PhieuNhapKho, Thuoc)
+CREATE TABLE [dbo].[ChiTietNhapKho] (
+    [MaChiTietNhap] varchar(15) NOT NULL PRIMARY KEY,
+    [MaPhieuNhap] varchar(15) NOT NULL REFERENCES [dbo].[PhieuNhapKho]([MaPhieuNhap]),
+    [MaThuoc] varchar(15) NOT NULL REFERENCES [dbo].[Thuoc]([MaThuoc]),
+    [SoLo] varchar(30) NOT NULL,
+    [SoLuong] int NOT NULL CHECK ([SoLuong] > 0),
+    [DonGia] decimal(12,0) NOT NULL CHECK ([DonGia] >= 0),
+    [ThanhTien] AS ([SoLuong]*[DonGia]) PERSISTED,
+    [HanSuDung] date NOT NULL,
+    [SoLuongTon] int NULL
 );
 GO
-CREATE TABLE [dbo].[TaiKhoan] (
-    [MaTaiKhoan] bigint IDENTITY(1,1) NOT NULL,
-    [TenDangNhap] varchar(50) NOT NULL,
-    [MatKhauHash] varchar(255) NOT NULL,
-    [Email] varchar(100) NULL,
-    [VaiTro] varchar(20) NOT NULL,
-    [TrangThai] bit CONSTRAINT [DF__TaiKhoan__TrangT__4CA06362] DEFAULT ((1)) NOT NULL,
-    [NgayTao] datetime CONSTRAINT [DF__TaiKhoan__NgayTa__4D94879B] DEFAULT (getdate()) NOT NULL,
-    [SoDienThoai] varchar(15) NOT NULL
+
+-- 18. Bảng NoiTru (Tham chiếu BenhNhan, GiuongBenh, PhieuKham)
+CREATE TABLE [dbo].[NoiTru] (
+    [MaNoiTru] varchar(15) NOT NULL PRIMARY KEY,
+    [MaBenhNhan] varchar(15) NOT NULL REFERENCES [dbo].[BenhNhan]([MaBenhNhan]),
+    [MaGiuong] varchar(15) NOT NULL REFERENCES [dbo].[GiuongBenh]([MaGiuong]),
+    [MaPhieuKham] varchar(15) NOT NULL REFERENCES [dbo].[PhieuKham]([MaPhieuKham]),
+    [NgayNhapVien] datetime NOT NULL DEFAULT getdate(),
+    [NgayXuatVien] datetime NULL,
+    [TrangThai] varchar(20) NOT NULL DEFAULT 'DangNam' CHECK ([TrangThai] IN ('ChuyenKhoa','DaXuatVien','DangNam')),
+    CONSTRAINT [CK_NoiTru_NgayXuat] CHECK ([NgayXuatVien] IS NULL OR [NgayXuatVien] >= [NgayNhapVien])
 );
 GO
+
+-- 19. Bảng LichTruc (Tham chiếu NhanVien, Khoa)
+CREATE TABLE [dbo].[LichTruc] (
+    [MaLichTruc] varchar(15) NOT NULL PRIMARY KEY,
+    [MaNhanVien] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [Ngay] date NOT NULL,
+    [Ca] varchar(10) NOT NULL CHECK ([Ca] IN ('Toi','Chieu','Sang')),
+    [MaKhoa] varchar(10) NULL REFERENCES [dbo].[Khoa]([MaKhoa]),
+    CONSTRAINT [UQ_LichTruc_NV_Ngay_Ca] UNIQUE ([MaNhanVien], [Ngay], [Ca])
+);
+GO
+
+-- 20. Bảng LichSuPhanCongKhoa (Tham chiếu NhanVien, Khoa)
+CREATE TABLE [dbo].[LichSuPhanCongKhoa] (
+    [MaPhanCong] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [MaNhanVien] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [MaKhoa] varchar(10) NOT NULL REFERENCES [dbo].[Khoa]([MaKhoa]),
+    [ChucVu] nvarchar(100) NULL,
+    [NgayBatDau] date NOT NULL DEFAULT (CONVERT(date, getdate())),
+    [NgayKetThuc] date NULL,
+    [LyDo] nvarchar(255) NULL,
+    [TrangThai] nvarchar(30) NULL DEFAULT N'DangCongTac'
+);
+GO
+
+-- 21. Bảng LichSuTruongKhoa (Tham chiếu Khoa, NhanVien)
+CREATE TABLE [dbo].[LichSuTruongKhoa] (
+    [MaLichSu] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [MaKhoa] varchar(10) NOT NULL REFERENCES [dbo].[Khoa]([MaKhoa]),
+    [MaNhanVien] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [NgayBoNhiem] datetime NULL DEFAULT getdate(),
+    [NgayMienNhiem] datetime NULL
+);
+GO
+
+-- 22. Bảng ThongBao (Tham chiếu TaiKhoan)
 CREATE TABLE [dbo].[ThongBao] (
-    [MaThongBao] int IDENTITY(1,1) NOT NULL,
-    [MaTaiKhoan] bigint NOT NULL,
+    [MaThongBao] int IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [MaTaiKhoan] bigint NOT NULL REFERENCES [dbo].[TaiKhoan]([MaTaiKhoan]),
     [TieuDe] nvarchar(200) NOT NULL,
     [NoiDung] nvarchar(1000) NOT NULL,
     [LoaiThongBao] varchar(50) NOT NULL,
-    [DaDoc] bit CONSTRAINT [DF__ThongBao__DaDoc__42ACE4D4] DEFAULT ((0)) NOT NULL,
-    [NgayTao] datetime CONSTRAINT [DF__ThongBao__NgayTa__43A1090D] DEFAULT (getdate()) NOT NULL
+    [DaDoc] bit NOT NULL DEFAULT 0,
+    [NgayTao] datetime NOT NULL DEFAULT getdate()
 );
 GO
-CREATE TABLE [dbo].[Thuoc] (
-    [MaThuoc] varchar(15) NOT NULL,
-    [TenThuoc] nvarchar(150) NOT NULL,
-    [DonViTinh] varchar(20) NOT NULL,
-    [DonGiaBan] decimal(12,0) NOT NULL,
-    [TonKhoHienTai] int CONSTRAINT [DF__Thuoc__TonKhoHie__534D60F1] DEFAULT ((0)) NOT NULL,
-    [NguongCanhBao] int CONSTRAINT [DF__Thuoc__NguongCan__5535A963] DEFAULT ((10)) NOT NULL
-);
-GO
+
+-- 23. Bảng YeuCauChuyenKhoa (Tham chiếu PhieuKham, BenhNhan, NhanVien, Khoa)
 CREATE TABLE [dbo].[YeuCauChuyenKhoa] (
-    [MaYeuCau] varchar(15) NOT NULL,
-    [LoaiYeuCau] varchar(20) NOT NULL,
-    [MaPhieuKham] varchar(15) NOT NULL,
-    [MaBenhNhan] varchar(15) NOT NULL,
-    [MaBacSiGui] varchar(15) NOT NULL,
-    [MaKhoaNhan] varchar(10) NOT NULL,
-    [MaBacSiDuocMoi] varchar(15) NULL,
+    [MaYeuCau] varchar(15) NOT NULL PRIMARY KEY,
+    [LoaiYeuCau] varchar(20) NOT NULL CHECK ([LoaiYeuCau] IN ('HOI_CHAN','CHUYEN_KHOA')),
+    [MaPhieuKham] varchar(15) NOT NULL REFERENCES [dbo].[PhieuKham]([MaPhieuKham]),
+    [MaBenhNhan] varchar(15) NOT NULL REFERENCES [dbo].[BenhNhan]([MaBenhNhan]),
+    [MaBacSiGui] varchar(15) NOT NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
+    [MaKhoaNhan] varchar(10) NOT NULL REFERENCES [dbo].[Khoa]([MaKhoa]),
+    [MaBacSiDuocMoi] varchar(15) NULL REFERENCES [dbo].[NhanVien]([MaNhanVien]),
     [LyDo] nvarchar(500) NOT NULL,
-    [TrangThai] varchar(30) CONSTRAINT [DF__YeuCauChu__Trang__40058253] DEFAULT ('CHO_TIEP_NHAN') NOT NULL,
-    [NgayTao] datetime2(7) CONSTRAINT [DF__YeuCauChu__NgayT__40F9A68C] DEFAULT (sysdatetime()) NOT NULL
+    [TrangThai] varchar(30) NOT NULL DEFAULT 'CHO_TIEP_NHAN',
+    [NgayTao] datetime2(7) NOT NULL DEFAULT sysdatetime()
 );
 GO
 
-/* ---------- PRIMARY KEYS & UNIQUE CONSTRAINTS ---------- */
-ALTER TABLE [dbo].[AuditLog] ADD CONSTRAINT [PK__AuditLog__EB5F6CBD493EA5A7] PRIMARY KEY ([AuditLogId] ASC);
-ALTER TABLE [dbo].[BenhNhan] ADD CONSTRAINT [PK__BenhNhan__22A8B33002329E1C] PRIMARY KEY ([MaBenhNhan] ASC);
-ALTER TABLE [dbo].[ChiTietHoaDon] ADD CONSTRAINT [PK__ChiTietH__651E49EB17DDFA94] PRIMARY KEY ([MaChiTietHD] ASC);
-ALTER TABLE [dbo].[ChiTietKetQuaCLS] ADD CONSTRAINT [PK__ChiTietK__651DCBF1E762E3D7] PRIMARY KEY ([MaChiTietXN] ASC);
-ALTER TABLE [dbo].[ChiTietNhapKho] ADD CONSTRAINT [PK__ChiTietN__D10F254C8741E985] PRIMARY KEY ([MaChiTietNhap] ASC);
-ALTER TABLE [dbo].[DichVuCLS] ADD CONSTRAINT [PK__DichVuCL__C0E6DE8F4E7B8867] PRIMARY KEY ([MaDichVu] ASC);
-ALTER TABLE [dbo].[DonThuoc] ADD CONSTRAINT [PK__DonThuoc__3EF99EE1208822BA] PRIMARY KEY ([MaDonThuoc] ASC);
-ALTER TABLE [dbo].[GiuongBenh] ADD CONSTRAINT [PK__GiuongBe__9C9FF4DC89F8AC4C] PRIMARY KEY ([MaGiuong] ASC);
-ALTER TABLE [dbo].[HoaDon] ADD CONSTRAINT [PK__HoaDon__835ED13B1CDA6A2C] PRIMARY KEY ([MaHoaDon] ASC);
-ALTER TABLE [dbo].[KetQuaCLS] ADD CONSTRAINT [PK__KetQuaCL__D5B3102A466943B4] PRIMARY KEY ([MaKetQua] ASC);
-ALTER TABLE [dbo].[Khoa] ADD CONSTRAINT [PK__Khoa__6539040565F75414] PRIMARY KEY ([MaKhoa] ASC);
-ALTER TABLE [dbo].[LichHen] ADD CONSTRAINT [PK__LichHen__150F264F38DDA557] PRIMARY KEY ([MaLichHen] ASC);
-ALTER TABLE [dbo].[LichSuPhanCongKhoa] ADD CONSTRAINT [PK__LichSuPh__C279D916BF4D0CFF] PRIMARY KEY ([MaPhanCong] ASC);
-ALTER TABLE [dbo].[LichSuTruongKhoa] ADD CONSTRAINT [PK__LichSuTr__C443222A99C91B34] PRIMARY KEY ([MaLichSu] ASC);
-ALTER TABLE [dbo].[LichTruc] ADD CONSTRAINT [PK__LichTruc__9EB5133C41CE73ED] PRIMARY KEY ([MaLichTruc] ASC);
-ALTER TABLE [dbo].[NhanVien] ADD CONSTRAINT [PK__NhanVien__77B2CA47A10B33CF] PRIMARY KEY ([MaNhanVien] ASC);
-ALTER TABLE [dbo].[NoiTru] ADD CONSTRAINT [PK__NoiTru__138E961D81AA66B5] PRIMARY KEY ([MaNoiTru] ASC);
-ALTER TABLE [dbo].[PhieuKham] ADD CONSTRAINT [PK__PhieuKha__FACA55DF4BC9602C] PRIMARY KEY ([MaPhieuKham] ASC);
-ALTER TABLE [dbo].[PhieuNhapKho] ADD CONSTRAINT [PK__PhieuNha__1470EF3B5A1F48BB] PRIMARY KEY ([MaPhieuNhap] ASC);
-ALTER TABLE [dbo].[Phong] ADD CONSTRAINT [PK__Phong__20BD5E5B8363B07B] PRIMARY KEY ([MaPhong] ASC);
-ALTER TABLE [dbo].[TaiKhoan] ADD CONSTRAINT [PK__TaiKhoan__AD7C6529FB783FA4] PRIMARY KEY ([MaTaiKhoan] ASC);
-ALTER TABLE [dbo].[ThongBao] ADD CONSTRAINT [PK__ThongBao__04DEB54E6AB8AA08] PRIMARY KEY ([MaThongBao] ASC);
-ALTER TABLE [dbo].[Thuoc] ADD CONSTRAINT [PK__Thuoc__4BB1F6201E2C0BB3] PRIMARY KEY ([MaThuoc] ASC);
-ALTER TABLE [dbo].[YeuCauChuyenKhoa] ADD CONSTRAINT [PK__YeuCauCh__CFA5DF4E9D782393] PRIMARY KEY ([MaYeuCau] ASC);
+-- 24. Bảng AuditLog (Độc lập)
+CREATE TABLE [dbo].[AuditLog] (
+    [AuditLogId] bigint IDENTITY(1,1) NOT NULL PRIMARY KEY,
+    [EventType] varchar(40) NOT NULL,
+    [Username] varchar(50) NULL,
+    [UserRole] varchar(20) NULL,
+    [HttpMethod] varchar(10) NOT NULL,
+    [RequestPath] varchar(255) NOT NULL,
+    [HttpStatus] int NOT NULL,
+    [RemoteAddress] varchar(64) NULL,
+    [Details] varchar(500) NULL,
+    [OccurredAt] datetime2(7) NOT NULL DEFAULT sysutcdatetime()
+);
 GO
 
-ALTER TABLE [dbo].[LichTruc] ADD CONSTRAINT [UQ_LichTruc_NV_Ngay_Ca] UNIQUE ([MaNhanVien] ASC, [Ngay] ASC, [Ca] ASC);
-ALTER TABLE [dbo].[NhanVien] ADD CONSTRAINT [UQ_NhanVien_SDT] UNIQUE ([SoDienThoai] ASC);
-ALTER TABLE [dbo].[TaiKhoan] ADD CONSTRAINT [UQ__TaiKhoan__55F68FC0FEE7925A] UNIQUE ([TenDangNhap] ASC);
-ALTER TABLE [dbo].[TaiKhoan] ADD CONSTRAINT [UQ_SDT] UNIQUE ([SoDienThoai] ASC);
-GO
-
-/* ---------- INDEXES ---------- */
+/* ======================================================================
+   INDEXES MỞ RỘNG (Filtered Indexes phục vụ tìm kiếm nhanh & cho phép NULL)
+   ====================================================================== */
 CREATE NONCLUSTERED INDEX [IX_AuditLog_OccurredAt] ON [dbo].[AuditLog] ([OccurredAt] DESC);
 CREATE UNIQUE NONCLUSTERED INDEX [UIX_BenhNhan_MaTaiKhoan] ON [dbo].[BenhNhan] ([MaTaiKhoan] ASC) WHERE ([MaTaiKhoan] IS NOT NULL);
-CREATE UNIQUE NONCLUSTERED INDEX [UQ_BenhNhan_BHYT] ON [dbo].[BenhNhan] ([MaBHYT] ASC) WHERE ([MaBHYT] IS NOT NULL AND [MaBHYT]<>'');
+CREATE UNIQUE NONCLUSTERED INDEX [UQ_BenhNhan_BHYT] ON [dbo].[BenhNhan] ([MaBHYT] ASC) WHERE ([MaBHYT] IS NOT NULL AND [MaBHYT] <> '');
 CREATE UNIQUE NONCLUSTERED INDEX [UQ_BenhNhan_CCCD] ON [dbo].[BenhNhan] ([SoCCCD] ASC) WHERE ([SoCCCD] IS NOT NULL);
 CREATE UNIQUE NONCLUSTERED INDEX [UQ_NhanVien_CCCD] ON [dbo].[NhanVien] ([SoCCCD] ASC) WHERE ([SoCCCD] IS NOT NULL);
 CREATE UNIQUE NONCLUSTERED INDEX [UQ_NhanVien_MaTaiKhoan] ON [dbo].[NhanVien] ([MaTaiKhoan] ASC) WHERE ([MaTaiKhoan] IS NOT NULL);
 CREATE UNIQUE NONCLUSTERED INDEX [UQ_TaiKhoan_Email_Filtered] ON [dbo].[TaiKhoan] ([Email] ASC) WHERE ([Email] IS NOT NULL);
 CREATE NONCLUSTERED INDEX [IX_YeuCauChuyenKhoa_BacSiNgay] ON [dbo].[YeuCauChuyenKhoa] ([MaBacSiGui] ASC, [NgayTao] DESC);
-GO
-
-/* ---------- FOREIGN KEYS ---------- */
-ALTER TABLE [dbo].[BenhNhan] ADD CONSTRAINT [FK_BenhNhan_TaiKhoan] FOREIGN KEY ([MaTaiKhoan]) REFERENCES [dbo].[TaiKhoan] ([MaTaiKhoan]);
-ALTER TABLE [dbo].[ChiTietHoaDon] ADD CONSTRAINT [FK_ChiTietHD_HoaDon] FOREIGN KEY ([MaHoaDon]) REFERENCES [dbo].[HoaDon] ([MaHoaDon]);
-ALTER TABLE [dbo].[ChiTietKetQuaCLS] ADD CONSTRAINT [FK_ChiTietKQCLS_KetQuaCLS] FOREIGN KEY ([MaKetQua]) REFERENCES [dbo].[KetQuaCLS] ([MaKetQua]);
-ALTER TABLE [dbo].[ChiTietNhapKho] ADD CONSTRAINT [FK_ChiTietNhap_PhieuNhap] FOREIGN KEY ([MaPhieuNhap]) REFERENCES [dbo].[PhieuNhapKho] ([MaPhieuNhap]);
-ALTER TABLE [dbo].[ChiTietNhapKho] ADD CONSTRAINT [FK_ChiTietNhap_Thuoc] FOREIGN KEY ([MaThuoc]) REFERENCES [dbo].[Thuoc] ([MaThuoc]);
-ALTER TABLE [dbo].[DonThuoc] ADD CONSTRAINT [FK_DonThuoc_PhieuKham] FOREIGN KEY ([MaPhieuKham]) REFERENCES [dbo].[PhieuKham] ([MaPhieuKham]);
-ALTER TABLE [dbo].[DonThuoc] ADD CONSTRAINT [FK_DonThuoc_Thuoc] FOREIGN KEY ([MaThuoc]) REFERENCES [dbo].[Thuoc] ([MaThuoc]);
-ALTER TABLE [dbo].[GiuongBenh] ADD CONSTRAINT [FK_GiuongBenh_Phong] FOREIGN KEY ([MaPhong]) REFERENCES [dbo].[Phong] ([MaPhong]);
-ALTER TABLE [dbo].[HoaDon] ADD CONSTRAINT [FK_HoaDon_BenhNhan] FOREIGN KEY ([MaBenhNhan]) REFERENCES [dbo].[BenhNhan] ([MaBenhNhan]);
-ALTER TABLE [dbo].[HoaDon] ADD CONSTRAINT [FK_HoaDon_NhanVien] FOREIGN KEY ([NhanVienThu]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[HoaDon] ADD CONSTRAINT [FK_HoaDon_PhieuKham] FOREIGN KEY ([MaPhieuKham]) REFERENCES [dbo].[PhieuKham] ([MaPhieuKham]);
-ALTER TABLE [dbo].[KetQuaCLS] ADD CONSTRAINT [FK_KetQuaCLS_BacSiDoc] FOREIGN KEY ([MaBacSiDoc]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[KetQuaCLS] ADD CONSTRAINT [FK_KetQuaCLS_BenhNhan] FOREIGN KEY ([MaBenhNhan]) REFERENCES [dbo].[BenhNhan] ([MaBenhNhan]);
-ALTER TABLE [dbo].[KetQuaCLS] ADD CONSTRAINT [FK_KetQuaCLS_DichVu] FOREIGN KEY ([MaDichVu]) REFERENCES [dbo].[DichVuCLS] ([MaDichVu]);
-ALTER TABLE [dbo].[KetQuaCLS] ADD CONSTRAINT [FK_KetQuaCLS_KTV] FOREIGN KEY ([MaKTV]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[KetQuaCLS] ADD CONSTRAINT [FK_KetQuaCLS_PhieuKham] FOREIGN KEY ([MaPhieuKham]) REFERENCES [dbo].[PhieuKham] ([MaPhieuKham]);
-ALTER TABLE [dbo].[Khoa] ADD CONSTRAINT [FK_Khoa_TruongKhoa] FOREIGN KEY ([MaTruongKhoa]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[LichHen] ADD CONSTRAINT [FK_LichHen_BacSi] FOREIGN KEY ([MaBacSi]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[LichHen] ADD CONSTRAINT [FK_LichHen_BenhNhan] FOREIGN KEY ([MaBenhNhan]) REFERENCES [dbo].[BenhNhan] ([MaBenhNhan]);
-ALTER TABLE [dbo].[LichHen] ADD CONSTRAINT [FK_LichHen_Khoa] FOREIGN KEY ([MaKhoa]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[LichSuPhanCongKhoa] ADD CONSTRAINT [FK_LSPC_Khoa] FOREIGN KEY ([MaKhoa]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[LichSuPhanCongKhoa] ADD CONSTRAINT [FK_LSPC_NhanVien] FOREIGN KEY ([MaNhanVien]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[LichSuTruongKhoa] ADD CONSTRAINT [FK_LichSu_Khoa] FOREIGN KEY ([MaKhoa]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[LichSuTruongKhoa] ADD CONSTRAINT [FK_LichSu_NhanVien] FOREIGN KEY ([MaNhanVien]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[LichTruc] ADD CONSTRAINT [FK_LichTruc_Khoa] FOREIGN KEY ([MaKhoa]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[LichTruc] ADD CONSTRAINT [FK_LichTruc_NhanVien] FOREIGN KEY ([MaNhanVien]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[NhanVien] ADD CONSTRAINT [FK_NhanVien_Khoa] FOREIGN KEY ([MaKhoa]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[NhanVien] ADD CONSTRAINT [FK_NhanVien_MaPhong] FOREIGN KEY ([MaPhong]) REFERENCES [dbo].[Phong] ([MaPhong]);
-ALTER TABLE [dbo].[NhanVien] ADD CONSTRAINT [FK_NhanVien_TaiKhoan] FOREIGN KEY ([MaTaiKhoan]) REFERENCES [dbo].[TaiKhoan] ([MaTaiKhoan]);
-ALTER TABLE [dbo].[NoiTru] ADD CONSTRAINT [FK_NoiTru_BenhNhan] FOREIGN KEY ([MaBenhNhan]) REFERENCES [dbo].[BenhNhan] ([MaBenhNhan]);
-ALTER TABLE [dbo].[NoiTru] ADD CONSTRAINT [FK_NoiTru_Giuong] FOREIGN KEY ([MaGiuong]) REFERENCES [dbo].[GiuongBenh] ([MaGiuong]);
-ALTER TABLE [dbo].[NoiTru] ADD CONSTRAINT [FK_NoiTru_PhieuKham] FOREIGN KEY ([MaPhieuKham]) REFERENCES [dbo].[PhieuKham] ([MaPhieuKham]);
-ALTER TABLE [dbo].[PhieuKham] ADD CONSTRAINT [FK_PhieuKham_BacSi] FOREIGN KEY ([MaBacSi]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[PhieuKham] ADD CONSTRAINT [FK_PhieuKham_BenhNhan] FOREIGN KEY ([MaBenhNhan]) REFERENCES [dbo].[BenhNhan] ([MaBenhNhan]);
-ALTER TABLE [dbo].[PhieuKham] ADD CONSTRAINT [FK_PhieuKham_Khoa] FOREIGN KEY ([MaKhoa]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[PhieuKham] ADD CONSTRAINT [FK_PhieuKham_LichHen] FOREIGN KEY ([MaLichHen]) REFERENCES [dbo].[LichHen] ([MaLichHen]);
-ALTER TABLE [dbo].[PhieuNhapKho] ADD CONSTRAINT [FK_PhieuNhap_NguoiDuyet] FOREIGN KEY ([NguoiDuyet]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[PhieuNhapKho] ADD CONSTRAINT [FK_PhieuNhap_NguoiNhap] FOREIGN KEY ([NguoiNhap]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[Phong] ADD CONSTRAINT [FK_Phong_Khoa] FOREIGN KEY ([MaKhoa]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[ThongBao] ADD CONSTRAINT [FK_ThongBao_TaiKhoan] FOREIGN KEY ([MaTaiKhoan]) REFERENCES [dbo].[TaiKhoan] ([MaTaiKhoan]);
-ALTER TABLE [dbo].[YeuCauChuyenKhoa] ADD CONSTRAINT [FK_YeuCauChuyenKhoa_BacSiGui] FOREIGN KEY ([MaBacSiGui]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[YeuCauChuyenKhoa] ADD CONSTRAINT [FK_YeuCauChuyenKhoa_BacSiMoi] FOREIGN KEY ([MaBacSiDuocMoi]) REFERENCES [dbo].[NhanVien] ([MaNhanVien]);
-ALTER TABLE [dbo].[YeuCauChuyenKhoa] ADD CONSTRAINT [FK_YeuCauChuyenKhoa_BenhNhan] FOREIGN KEY ([MaBenhNhan]) REFERENCES [dbo].[BenhNhan] ([MaBenhNhan]);
-ALTER TABLE [dbo].[YeuCauChuyenKhoa] ADD CONSTRAINT [FK_YeuCauChuyenKhoa_KhoaNhan] FOREIGN KEY ([MaKhoaNhan]) REFERENCES [dbo].[Khoa] ([MaKhoa]);
-ALTER TABLE [dbo].[YeuCauChuyenKhoa] ADD CONSTRAINT [FK_YeuCauChuyenKhoa_PhieuKham] FOREIGN KEY ([MaPhieuKham]) REFERENCES [dbo].[PhieuKham] ([MaPhieuKham]);
-GO
-
-/* ---------- CHECK CONSTRAINTS ---------- */
-ALTER TABLE [dbo].[BenhNhan] WITH CHECK ADD CONSTRAINT [CK__BenhNhan__GioiTi__619B8048] CHECK ([GioiTinh]='Khac' OR [GioiTinh]='Nu' OR [GioiTinh]='Nam');
-ALTER TABLE [dbo].[ChiTietHoaDon] WITH CHECK ADD CONSTRAINT [CK__ChiTietHo__DonGi__3587F3E0] CHECK ([DonGia]>=(0));
-ALTER TABLE [dbo].[ChiTietHoaDon] WITH CHECK ADD CONSTRAINT [CK__ChiTietHo__LoaiD__3493CFA7] CHECK ([LoaiDichVu]='Giuong' OR [LoaiDichVu]='Thuoc' OR [LoaiDichVu]='CanLamSang' OR [LoaiDichVu]='Kham');
-ALTER TABLE [dbo].[ChiTietHoaDon] WITH CHECK ADD CONSTRAINT [CK__ChiTietHo__SoLuo__37703C52] CHECK ([SoLuong]>(0));
-ALTER TABLE [dbo].[ChiTietKetQuaCLS] WITH CHECK ADD CONSTRAINT [CK__ChiTietKe__DanhG__1AD3FDA4] CHECK ([DanhGia]='Thap' OR [DanhGia]='Cao' OR [DanhGia]='BinhThuong');
-ALTER TABLE [dbo].[ChiTietNhapKho] WITH CHECK ADD CONSTRAINT [CK__ChiTietNh__DonGi__25518C17] CHECK ([DonGia]>=(0));
-ALTER TABLE [dbo].[ChiTietNhapKho] WITH CHECK ADD CONSTRAINT [CK__ChiTietNh__SoLuo__245D67DE] CHECK ([SoLuong]>(0));
-ALTER TABLE [dbo].[DichVuCLS] WITH CHECK ADD CONSTRAINT [CK__DichVuCLS__DonGi__10566F31] CHECK ([DonGia]>=(0));
-ALTER TABLE [dbo].[DonThuoc] WITH CHECK ADD CONSTRAINT [CK__DonThuoc__SoLuon__0B91BA14] CHECK ([SoLuong]>(0));
-ALTER TABLE [dbo].[GiuongBenh] WITH CHECK ADD CONSTRAINT [CK__GiuongBen__DonGi__7F2BE32F] CHECK ([DonGiaNgay]>=(0));
-ALTER TABLE [dbo].[GiuongBenh] WITH CHECK ADD CONSTRAINT [CK__GiuongBen__Trang__7D439ABD] CHECK ([TrangThai]='BaoTri' OR [TrangThai]='DangSuDung' OR [TrangThai]='Trong');
-ALTER TABLE [dbo].[HoaDon] WITH CHECK ADD CONSTRAINT [CK__HoaDon__HinhThuc__2CF2ADDF] CHECK ([HinhThucThanhToan]='ViDienTu' OR [HinhThucThanhToan]='ChuyenKhoan' OR [HinhThucThanhToan]='TienMat');
-ALTER TABLE [dbo].[HoaDon] WITH CHECK ADD CONSTRAINT [CK__HoaDon__TrangTha__2EDAF651] CHECK ([TrangThaiTT]='HoanTien' OR [TrangThaiTT]='DaThanhToan' OR [TrangThaiTT]='ChuaThanhToan');
-ALTER TABLE [dbo].[LichHen] WITH CHECK ADD CONSTRAINT [CK__LichHen__HinhThu__6D0D32F4] CHECK ([HinhThucDat]='DienThoai' OR [HinhThucDat]='TrucTiep' OR [HinhThucDat]='Online');
-ALTER TABLE [dbo].[LichHen] WITH CHECK ADD CONSTRAINT [CK__LichHen__LoaiKha__6C190EBB] CHECK ([LoaiKham]='TaiKham' OR [LoaiKham]='KhamDichVu' OR [LoaiKham]='KhamThuong');
-ALTER TABLE [dbo].[LichHen] WITH CHECK ADD CONSTRAINT [CK_LichHen_ThoiGianKhamDuKien] CHECK (([LoaiKham]='TaiKham' OR [LoaiKham]='KhamThuong') AND [ThoiGianKhamDuKien]=(30) OR [LoaiKham]='KhamDichVu' AND [ThoiGianKhamDuKien]=(45));
-ALTER TABLE [dbo].[LichHen] WITH CHECK ADD CONSTRAINT [CK_LichHen_TrangThai] CHECK ([TrangThai]='DaHuy' OR [TrangThai]='DaKham' OR [TrangThai]='ChoKetQuaCLS' OR [TrangThai]='DangKham' OR [TrangThai]='DangChoKham' OR [TrangThai]='DaDatLich');
-ALTER TABLE [dbo].[LichTruc] WITH CHECK ADD CONSTRAINT [CK__LichTruc__Ca__6754599E] CHECK ([Ca]='Toi' OR [Ca]='Chieu' OR [Ca]='Sang');
-ALTER TABLE [dbo].[NhanVien] WITH CHECK ADD CONSTRAINT [CK__NhanVien__GioiTi__59FA5E80] CHECK ([GioiTinh]='Khac' OR [GioiTinh]='Nu' OR [GioiTinh]='Nam');
-ALTER TABLE [dbo].[NhanVien] WITH CHECK ADD CONSTRAINT [CK__NhanVien__TrangT__5CD6CB2B] CHECK ([TrangThai]='DaNghi' OR [TrangThai]='DangLamViec');
-ALTER TABLE [dbo].[NhanVien] WITH CHECK ADD CONSTRAINT [CK_NhanVien_VaiTro] CHECK ([VaiTro]='QuanLyNhanSu' OR [VaiTro]='BacSi' OR [VaiTro]='DieuDuong' OR [VaiTro]='LeTan' OR [VaiTro]='DuocSi' OR [VaiTro]='KTV' OR [VaiTro]='ThuNgan' OR [VaiTro]='QuanTri');
-ALTER TABLE [dbo].[NoiTru] WITH CHECK ADD CONSTRAINT [CK__NoiTru__TrangTha__04E4BC85] CHECK ([TrangThai]='ChuyenKhoa' OR [TrangThai]='DaXuatVien' OR [TrangThai]='DangNam');
-ALTER TABLE [dbo].[NoiTru] WITH CHECK ADD CONSTRAINT [CK_NoiTru_NgayXuat] CHECK ([NgayXuatVien] IS NULL OR [NgayXuatVien]>=[NgayNhapVien]);
-ALTER TABLE [dbo].[Phong] WITH CHECK ADD CONSTRAINT [CK__Phong__LoaiPhong__26CFC035] CHECK ([LoaiPhong]='PHAU_THUAT' OR [LoaiPhong]='XET_NGHIEM' OR [LoaiPhong]='LUU_BENH' OR [LoaiPhong]='KHAM_BENH');
-ALTER TABLE [dbo].[TaiKhoan] WITH CHECK ADD CONSTRAINT [CK_TaiKhoan_VaiTro] CHECK ([VaiTro]='QuanLyNhanSu' OR [VaiTro]='BacSi' OR [VaiTro]='DieuDuong' OR [VaiTro]='LeTan' OR [VaiTro]='DuocSi' OR [VaiTro]='KTV' OR [VaiTro]='ThuNgan' OR [VaiTro]='QuanTri' OR [VaiTro]='BenhNhan');
-ALTER TABLE [dbo].[Thuoc] WITH CHECK ADD CONSTRAINT [CK__Thuoc__DonGiaBan__52593CB8] CHECK ([DonGiaBan]>=(0));
-ALTER TABLE [dbo].[Thuoc] WITH CHECK ADD CONSTRAINT [CK__Thuoc__TonKhoHie__5441852A] CHECK ([TonKhoHienTai]>=(0));
-ALTER TABLE [dbo].[YeuCauChuyenKhoa] WITH CHECK ADD CONSTRAINT [CK__YeuCauChu__LoaiY__3F115E1A] CHECK ([LoaiYeuCau]='HOI_CHAN' OR [LoaiYeuCau]='CHUYEN_KHOA');
 GO
