@@ -1420,16 +1420,20 @@ BEGIN
     IF @KeyValue IS NOT NULL
     BEGIN
         DECLARE @Exists BIT = 0;
+        DECLARE @CheckSql NVARCHAR(MAX) = N'SELECT @Found = CASE WHEN EXISTS (SELECT 1 FROM ' + @QualifiedTable + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value) THEN 1 ELSE 0 END;';
         EXEC sys.sp_executesql 
-            N'SELECT @Found = CASE WHEN EXISTS (SELECT 1 FROM ' + @QualifiedTable + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value) THEN 1 ELSE 0 END;',
+            @CheckSql,
             N'@Value NVARCHAR(4000), @Found BIT OUTPUT', @Value = @KeyValue, @Found = @Exists OUTPUT;
 
         IF @Exists = 1
         BEGIN
             IF @UpdateSet IS NOT NULL
+            BEGIN
+                DECLARE @UpdateSql NVARCHAR(MAX) = N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;';
                 EXEC sys.sp_executesql 
-                    N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;',
+                    @UpdateSql,
                     N'@Payload NVARCHAR(MAX), @Value NVARCHAR(4000)', @Payload = @Payload, @Value = @KeyValue;
+            END
             RETURN;
         END
     END
@@ -1438,8 +1442,9 @@ BEGIN
     IF @InsertCols IS NULL
         THROW 50004, 'No writable entity columns found in payload.', 1;
 
+    DECLARE @InsertSql NVARCHAR(MAX) = N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertCols + N') SELECT ' + @InsertVals + N';';
     EXEC sys.sp_executesql 
-        N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertCols + N') SELECT ' + @InsertVals + N';',
+        @InsertSql,
         N'@Payload NVARCHAR(MAX)', @Payload = @Payload;
 END;
 GO

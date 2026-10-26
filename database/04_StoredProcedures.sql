@@ -200,20 +200,81 @@ END;
 GO
 
 -- 13. Generic Save
-CREATE OR ALTER PROCEDURE dbo.usp_Entity_Save @EntityName SYSNAME, @Payload NVARCHAR(MAX) AS
+CREATE OR ALTER PROCEDURE dbo.usp_Entity_Save
+    @EntityName SYSNAME,
+    @Payload NVARCHAR(MAX)
+AS
 BEGIN
     SET NOCOUNT ON;
-    IF ISJSON(@Payload) <> 1 THROW 50001, 'Invalid JSON.', 1;
-    IF @EntityName NOT IN (N'AuditLog', N'BenhNhan', N'ChiTietHoaDon', N'ChiTietKetQuaCLS', N'ChiTietNhapKho', N'DichVuCLS', N'DonThuoc', N'GiuongBenh', N'HoaDon', N'KetQuaCLS', N'Khoa', N'LichHen', N'LichTruc', N'NhanVien', N'NoiTru', N'PhieuKham', N'PhieuNhapKho', N'Thuoc', N'YeuCauChuyenKhoa') THROW 50002, 'Not allowed.', 1;
-    DECLARE @ObjectId INT = OBJECT_ID(N'dbo.' + QUOTENAME(@EntityName), N'U'), @KeyColumn SYSNAME;
-    SELECT @KeyColumn = c.name FROM sys.key_constraints kc JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id WHERE kc.parent_object_id = @ObjectId AND kc.type = N'PK';
-    IF @KeyColumn IS NULL THROW 50003, 'No PK.', 1;
-    DECLARE @QualifiedTable NVARCHAR(300) = N'dbo.' + QUOTENAME(@EntityName), @KeyValue NVARCHAR(4000) = JSON_VALUE(@Payload, N'$.' + QUOTENAME(@KeyColumn, '"'));
+
+    IF ISJSON(@Payload) <> 1
+        THROW 50001, 'Invalid JSON.', 1;
+
+    IF @EntityName NOT IN (
+        N'AuditLog', N'BenhNhan', N'ChiTietHoaDon', N'ChiTietKetQuaCLS', N'ChiTietNhapKho',
+        N'DichVuCLS', N'DonThuoc', N'GiuongBenh', N'HoaDon', N'KetQuaCLS', N'Khoa',
+        N'LichHen', N'LichTruc', N'NhanVien', N'NoiTru', N'PhieuKham', N'PhieuNhapKho',
+        N'Thuoc', N'YeuCauChuyenKhoa'
+    )
+        THROW 50002, 'Not allowed.', 1;
+
+    DECLARE @ObjectId INT = OBJECT_ID(N'dbo.' + QUOTENAME(@EntityName), N'U');
+    DECLARE @KeyColumn SYSNAME;
+
+    SELECT @KeyColumn = c.name
+    FROM sys.key_constraints kc
+    JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE kc.parent_object_id = @ObjectId AND kc.type = N'PK';
+
+    IF @KeyColumn IS NULL
+        THROW 50003, 'No PK.', 1;
+
+    DECLARE @QualifiedTable NVARCHAR(300) = N'dbo.' + QUOTENAME(@EntityName);
+    DECLARE @KeyValue NVARCHAR(4000) = JSON_VALUE(@Payload, N'$.' + QUOTENAME(@KeyColumn, '"'));
     DECLARE @InsertCols NVARCHAR(MAX), @InsertVals NVARCHAR(MAX), @UpdateSet NVARCHAR(MAX);
-    SELECT @InsertCols = STRING_AGG(CONVERT(NVARCHAR(MAX), QUOTENAME(c.name)), N',') WITHIN GROUP (ORDER BY c.column_id), @InsertVals = STRING_AGG(CONVERT(NVARCHAR(MAX), N'(SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')'), N',') WITHIN GROUP (ORDER BY c.column_id), @UpdateSet = STRING_AGG(CASE WHEN c.name <> @KeyColumn THEN CONVERT(NVARCHAR(MAX), QUOTENAME(c.name) + N' = (SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')') END, N',') WITHIN GROUP (ORDER BY c.column_id) FROM sys.columns c JOIN OPENJSON(@Payload) j ON j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT WHERE c.object_id = @ObjectId AND c.is_identity = 0 AND c.is_computed = 0 AND c.generated_always_type = 0;
-    IF @KeyValue IS NOT NULL BEGIN DECLARE @Exists BIT = 0; EXEC sys.sp_executesql N'SELECT @Found = CASE WHEN EXISTS (SELECT 1 FROM ' + @QualifiedTable + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value) THEN 1 ELSE 0 END;', N'@Value NVARCHAR(4000), @Found BIT OUTPUT', @Value = @KeyValue, @Found = @Exists OUTPUT; IF @Exists = 1 BEGIN IF @UpdateSet IS NOT NULL EXEC sys.sp_executesql N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;', N'@Payload NVARCHAR(MAX), @Value NVARCHAR(4000)', @Payload = @Payload, @Value = @KeyValue; RETURN; END END
-    IF @InsertCols IS NULL THROW 50004, 'No writable columns.', 1;
-    EXEC sys.sp_executesql N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertCols + N') SELECT ' + @InsertVals + N';', N'@Payload NVARCHAR(MAX)', @Payload = @Payload;
+
+    SELECT 
+        @InsertCols = STRING_AGG(CONVERT(NVARCHAR(MAX), QUOTENAME(c.name)), N',') WITHIN GROUP (ORDER BY c.column_id),
+        @InsertVals = STRING_AGG(CONVERT(NVARCHAR(MAX), N'(SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')'), N',') WITHIN GROUP (ORDER BY c.column_id),
+        @UpdateSet  = STRING_AGG(CASE WHEN c.name <> @KeyColumn 
+                                      THEN CONVERT(NVARCHAR(MAX), QUOTENAME(c.name) + N' = (SELECT [value] FROM OPENJSON(@Payload) WHERE [key] = N''' + REPLACE(c.name, N'''', N'''''') + N''')') 
+                                 END, N',') WITHIN GROUP (ORDER BY c.column_id)
+    FROM sys.columns c
+    JOIN OPENJSON(@Payload) j ON j.[key] COLLATE DATABASE_DEFAULT = c.name COLLATE DATABASE_DEFAULT
+    WHERE c.object_id = @ObjectId
+      AND c.is_identity = 0
+      AND c.is_computed = 0
+      AND c.generated_always_type = 0;
+
+    IF @KeyValue IS NOT NULL
+    BEGIN
+        DECLARE @Exists BIT = 0;
+        DECLARE @CheckSql NVARCHAR(MAX) = N'SELECT @Found = CASE WHEN EXISTS (SELECT 1 FROM ' + @QualifiedTable + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value) THEN 1 ELSE 0 END;';
+        EXEC sys.sp_executesql 
+            @CheckSql,
+            N'@Value NVARCHAR(4000), @Found BIT OUTPUT', @Value = @KeyValue, @Found = @Exists OUTPUT;
+
+        IF @Exists = 1
+        BEGIN
+            IF @UpdateSet IS NOT NULL
+            BEGIN
+                DECLARE @UpdateSql NVARCHAR(MAX) = N'UPDATE ' + @QualifiedTable + N' SET ' + @UpdateSet + N' WHERE ' + QUOTENAME(@KeyColumn) + N' = @Value;';
+                EXEC sys.sp_executesql 
+                    @UpdateSql,
+                    N'@Payload NVARCHAR(MAX), @Value NVARCHAR(4000)', @Payload = @Payload, @Value = @KeyValue;
+            END
+            RETURN;
+        END
+    END
+
+    IF @InsertCols IS NULL
+        THROW 50004, 'No writable columns.', 1;
+
+    DECLARE @InsertSql NVARCHAR(MAX) = N'INSERT INTO ' + @QualifiedTable + N' (' + @InsertCols + N') SELECT ' + @InsertVals + N';';
+    EXEC sys.sp_executesql 
+        @InsertSql,
+        N'@Payload NVARCHAR(MAX)', @Payload = @Payload;
 END;
 GO
 
