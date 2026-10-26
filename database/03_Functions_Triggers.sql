@@ -179,6 +179,271 @@ CREATE OR ALTER FUNCTION dbo.fn_BaoCaoCongSuatGiuong() RETURNS TABLE AS RETURN
 );
 GO
 
+-- =========================================================================
+-- 8. VAI TRÒ: ĐIỀU DƯỠNG (Nurse)
+-- =========================================================================
+
+-- 8.1. Tra cứu danh sách Bệnh nhân nội trú đang điều trị theo Phòng
+CREATE OR ALTER FUNCTION dbo.fn_DanhSachBenhNhanNoiTruTheoPhong
+(
+    @MaPhong varchar(15)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        p.MaPhong,
+        p.TenPhong,
+        gb.MaGiuong,
+        gb.SoGiuong,
+        nt.MaNoiTru,
+        bn.MaBenhNhan,
+        bn.HoTen AS TenBenhNhan,
+        bn.GioiTinh,
+        bn.SoDienThoai,
+        nt.NgayNhapVien,
+        nt.TrangThai AS TrangThaiNoiTru
+    FROM dbo.Phong p
+    JOIN dbo.GiuongBenh gb ON p.MaPhong = gb.MaPhong
+    JOIN dbo.NoiTru nt ON gb.MaGiuong = nt.MaGiuong
+    JOIN dbo.BenhNhan bn ON nt.MaBenhNhan = bn.MaBenhNhan
+    WHERE p.MaPhong = @MaPhong
+      AND nt.TrangThai = 'DangNam'
+);
+GO
+
+-- 8.2. Tra cứu chi tiết đơn thuốc & lịch dùng thuốc của Bệnh nhân nội trú
+CREATE OR ALTER FUNCTION dbo.fn_LichUongThuocBenhNhanNoiTru
+(
+    @MaNoiTru varchar(15)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        nt.MaNoiTru,
+        bn.MaBenhNhan,
+        bn.HoTen AS TenBenhNhan,
+        t.MaThuoc,
+        t.TenThuoc,
+        dt.SoLuong,
+        dt.DonViTinh,
+        dt.LieuDung,
+        dt.CachDung,
+        dt.TrangThai AS TrangThaiDonThuoc
+    FROM dbo.NoiTru nt
+    JOIN dbo.BenhNhan bn ON nt.MaBenhNhan = bn.MaBenhNhan
+    JOIN dbo.PhieuKham pk ON nt.MaPhieuKham = pk.MaPhieuKham
+    JOIN dbo.DonThuoc dt ON pk.MaPhieuKham = dt.MaPhieuKham
+    JOIN dbo.Thuoc t ON dt.MaThuoc = t.MaThuoc
+    WHERE nt.MaNoiTru = @MaNoiTru
+      AND nt.TrangThai = 'DangNam'
+);
+GO
+
+-- 8.3. Xem chỉ số sinh tồn (Vital Signs) của Bệnh nhân theo Phiếu khám
+CREATE OR ALTER FUNCTION dbo.fn_DieuDuong_XemChiSoSinhTon
+(
+    @MaPhieuKham varchar(15)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        pk.MaPhieuKham,
+        pk.MaBenhNhan,
+        bn.HoTen AS TenBenhNhan,
+        pk.NgayKham,
+        pk.Mach,
+        pk.NhietDo,
+        pk.HuyetAp,
+        pk.NhipTho,
+        pk.CanNang,
+        pk.ChieuCao,
+        pk.TrieuChung
+    FROM dbo.PhieuKham pk
+    JOIN dbo.BenhNhan bn ON pk.MaBenhNhan = bn.MaBenhNhan
+    WHERE pk.MaPhieuKham = @MaPhieuKham
+);
+GO
+
+-- 8.4. Tra cứu tình trạng giường bệnh theo Khoa
+CREATE OR ALTER FUNCTION dbo.fn_DieuDuong_DanhSachGiuongTheoKhoa
+(
+    @MaKhoa varchar(10)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        p.MaKhoa,
+        p.MaPhong,
+        p.TenPhong,
+        gb.MaGiuong,
+        gb.SoGiuong,
+        gb.TrangThai AS TrangThaiGiuong,
+        gb.DonGiaNgay,
+        nt.MaNoiTru,
+        bn.HoTen AS TenBenhNhanDangNam
+    FROM dbo.Phong p
+    JOIN dbo.GiuongBenh gb ON p.MaPhong = gb.MaPhong
+    LEFT JOIN dbo.NoiTru nt ON gb.MaGiuong = nt.MaGiuong AND nt.TrangThai = 'DangNam'
+    LEFT JOIN dbo.BenhNhan bn ON nt.MaBenhNhan = bn.MaBenhNhan
+    WHERE p.MaKhoa = @MaKhoa
+);
+GO
+
+-- =========================================================================
+-- 10. VAI TRÒ: NHÂN SỰ (Human Resources - HR)
+-- =========================================================================
+
+-- 10.1. Thống kê cơ cấu nhân sự (Bác sĩ, Điều dưỡng, KTV, Lễ tân/Thu ngân/Khác) theo Khoa
+CREATE OR ALTER FUNCTION dbo.fn_NhanSu_ThongKeNhanSuTheoKhoa
+(
+    @MaKhoa varchar(10) = NULL
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        k.MaKhoa,
+        k.TenKhoa,
+        COUNT(nv.MaNhanVien) AS TongSoNhanVien,
+        SUM(CASE WHEN nv.VaiTro = 'BacSi' THEN 1 ELSE 0 END) AS SoBacSi,
+        SUM(CASE WHEN nv.VaiTro = 'DieuDuong' THEN 1 ELSE 0 END) AS SoDieuDuong,
+        SUM(CASE WHEN nv.VaiTro = 'KTV' THEN 1 ELSE 0 END) AS SoKTV,
+        SUM(CASE WHEN nv.VaiTro NOT IN ('BacSi', 'DieuDuong', 'KTV') THEN 1 ELSE 0 END) AS SoNhanVienKhac
+    FROM dbo.Khoa k
+    LEFT JOIN dbo.NhanVien nv ON k.MaKhoa = nv.MaKhoa AND nv.TrangThai = 'DangLamViec'
+    WHERE (@MaKhoa IS NULL OR k.MaKhoa = @MaKhoa)
+    GROUP BY k.MaKhoa, k.TenKhoa
+);
+GO
+
+-- 10.2. Thống kê tổng số ca trực (Sáng, Chiều, Tối) của từng nhân viên theo khoảng thời gian
+CREATE OR ALTER FUNCTION dbo.fn_NhanSu_ThongKeCaTrucNhanVien
+(
+    @TuNgay date,
+    @DenNgay date,
+    @MaKhoa varchar(10) = NULL
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        nv.MaNhanVien,
+        nv.HoTen,
+        k.TenKhoa,
+        COUNT(lt.MaLichTruc) AS TongSoCa,
+        SUM(CASE WHEN lt.Ca = 'Sang' THEN 1 ELSE 0 END) AS SoCaSang,
+        SUM(CASE WHEN lt.Ca = 'Chieu' THEN 1 ELSE 0 END) AS SoCaChieu,
+        SUM(CASE WHEN lt.Ca = 'Toi' THEN 1 ELSE 0 END) AS SoCaToi
+    FROM dbo.NhanVien nv
+    LEFT JOIN dbo.Khoa k ON nv.MaKhoa = k.MaKhoa
+    LEFT JOIN dbo.LichTruc lt ON nv.MaNhanVien = lt.MaNhanVien 
+        AND lt.Ngay BETWEEN @TuNgay AND @DenNgay
+    WHERE (@MaKhoa IS NULL OR nv.MaKhoa = @MaKhoa)
+      AND nv.TrangThai = 'DangLamViec'
+    GROUP BY nv.MaNhanVien, nv.HoTen, k.TenKhoa
+);
+GO
+
+-- 10.3. Tra cứu lịch sử luân chuyển khoa phòng và bổ nhiệm chức vụ của Nhân viên
+CREATE OR ALTER FUNCTION dbo.fn_NhanSu_LichSuCongTacNhanVien
+(
+    @MaNhanVien varchar(15)
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        'LichSuPhanCong' AS LoaiThayDoi,
+        k.TenKhoa AS TenKhoa,
+        lspc.NgayBatDau,
+        lspc.NgayKetThuc,
+        lspc.LyDo AS GhiChu
+    FROM dbo.LichSuPhanCongKhoa lspc
+    JOIN dbo.Khoa k ON lspc.MaKhoa = k.MaKhoa
+    WHERE lspc.MaNhanVien = @MaNhanVien
+
+    UNION ALL
+
+    SELECT 
+        'BoNhiemTruongKhoa' AS LoaiThayDoi,
+        k.TenKhoa AS TenKhoa,
+        CAST(lstk.NgayBoNhiem AS date) AS NgayBatDau,
+        CAST(lstk.NgayMienNhiem AS date) AS NgayKetThuc,
+        N'Đảm nhiệm vị trí Trưởng Khoa' AS GhiChu
+    FROM dbo.LichSuTruongKhoa lstk
+    JOIN dbo.Khoa k ON lstk.MaKhoa = k.MaKhoa
+    WHERE lstk.MaNhanVien = @MaNhanVien
+);
+GO
+
+-- 10.4. Kiểm tra trùng lịch trực của nhân viên trước khi phân công ca mới
+CREATE OR ALTER FUNCTION dbo.fn_NhanSu_KiemTraTrungLichTruc
+(
+    @MaNhanVien varchar(15),
+    @Ngay date,
+    @Ca varchar(10)
+)
+RETURNS bit
+AS
+BEGIN
+    DECLARE @IsDuplicate bit = 0;
+
+    IF EXISTS (
+        SELECT 1 
+        FROM dbo.LichTruc 
+        WHERE MaNhanVien = @MaNhanVien 
+          AND Ngay = @Ngay 
+          AND Ca = @Ca
+    )
+    BEGIN
+        SET @IsDuplicate = 1;
+    END
+
+    RETURN @IsDuplicate;
+END;
+GO
+
+-- 10.5. Danh sách Bác sĩ có lịch trực trong ngày và số lượng lịch hẹn đã tiếp nhận
+CREATE OR ALTER FUNCTION dbo.fn_NhanSu_DanhSachBacSiSanSangKham
+(
+    @NgayKham date,
+    @MaKhoa varchar(10) = NULL
+)
+RETURNS TABLE
+AS
+RETURN
+(
+    SELECT 
+        nv.MaNhanVien,
+        nv.HoTen AS TenBacSi,
+        k.TenKhoa,
+        lt.Ca,
+        (
+            SELECT COUNT(*) 
+            FROM dbo.LichHen lh 
+            WHERE lh.MaBacSi = nv.MaNhanVien 
+              AND lh.NgayKham = @NgayKham 
+              AND lh.TrangThai <> 'DaHuy'
+        ) AS SoCaDaHen
+    FROM dbo.NhanVien nv
+    JOIN dbo.Khoa k ON nv.MaKhoa = k.MaKhoa
+    JOIN dbo.LichTruc lt ON nv.MaNhanVien = lt.MaNhanVien AND lt.Ngay = @NgayKham
+    WHERE nv.VaiTro = 'BacSi'
+      AND nv.TrangThai = 'DangLamViec'
+      AND (@MaKhoa IS NULL OR nv.MaKhoa = @MaKhoa)
+);
+GO
 
 -- =========================================================================
 -- PHẦN II: DANH SÁCH TRIGGERS (5 TRIGGERS)
