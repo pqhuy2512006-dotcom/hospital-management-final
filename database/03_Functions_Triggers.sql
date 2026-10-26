@@ -481,7 +481,16 @@ BEGIN
     SET NOCOUNT ON;
     IF UPDATE(TrangThai)
     BEGIN
-        IF EXISTS (SELECT 1 FROM inserted i JOIN deleted d ON i.MaDonThuoc = d.MaDonThuoc WHERE i.TrangThai IN ('DISPENSED', 'COMPLETED') AND ISNULL(d.TrangThai, '') NOT IN ('DISPENSED', 'COMPLETED') AND NOT EXISTS (SELECT 1 FROM dbo.HoaDon hd WHERE hd.MaPhieuKham = i.MaPhieuKham AND hd.TrangThaiTT = 'DaThanhToan'))
+        IF EXISTS (
+             SELECT 1 
+             FROM inserted i JOIN deleted d ON i.MaDonThuoc = d.MaDonThuoc 
+             WHERE i.TrangThai IN ('DISPENSED', 'COMPLETED') AND ISNULL(d.TrangThai, '') 
+             NOT IN ('DISPENSED', 'COMPLETED') 
+             AND NOT EXISTS (
+                SELECT 1 FROM dbo.HoaDon hd 
+                WHERE hd.MaPhieuKham = i.MaPhieuKham AND hd.TrangThaiTT = 'DaThanhToan'
+                )
+             )
         BEGIN
             RAISERROR (N'Lỗi: Bệnh nhân chưa hoàn tất thanh toán hóa đơn. Không thể phát thuốc!', 16, 1);
             ROLLBACK TRANSACTION;
